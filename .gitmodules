@@ -1,0 +1,6 @@
+[submodule "external/ponca"]
+	path = external/ponca
+	url = https://github.com/poncateam/ponca.git
+[submodule "external/libigl"]
+	path = external/libigl
+	url = https://github.com/libigl/libigl.git
