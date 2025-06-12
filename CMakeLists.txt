@@ -34,16 +34,19 @@ add_subdirectory(external/libigl)
 # Executable
 add_executable(${PROJECT_NAME} src/main.cpp)
 
+
+# Include Eigen and libigl
+target_include_directories(${PROJECT_NAME}
+        PRIVATE ${EIGEN3_INCLUDE_DIR}
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/external/libigl/include"
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/external/ponca"
+)
+
+
 target_link_libraries(${PROJECT_NAME}
         PRIVATE glad
         PRIVATE igl::core
         PRIVATE igl::glfw
         PRIVATE igl::opengl
         PRIVATE igl::imgui
-)
-
-# Include Eigen and libigl
-target_include_directories(${PROJECT_NAME}
-        PRIVATE ${EIGEN3_INCLUDE_DIR}
-        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/external/libigl/include"
 )
