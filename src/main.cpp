@@ -47,7 +47,9 @@ int main(int argc, char *argv[])
     // Plot the mesh
     igl::opengl::glfw::Viewer viewer;
     viewer.data().set_mesh(cloudV, meshF);
-    viewer.data().set_face_based(true);
+    // viewer.data().set_face_based(true);
+
+    viewer.data().add_points(cloudV, Eigen::RowVector3d(0, 0, 0));
     viewer.launch();
 }
 
