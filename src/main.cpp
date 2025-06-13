@@ -15,6 +15,8 @@ This Source Code Form is subject to the terms of the Mozilla Public
 #include <Ponca/SpatialPartitioning>
 #include "poncaAdapters.hpp"
 
+#include <igl/principal_curvature.h>
+
 using Scalar             = double;
 using VectorType         = Eigen::Vector<Scalar, 3>;
 using PPAdapter          = BlockPointAdapter<Scalar>;
@@ -166,13 +168,29 @@ int main(int argc, char *argv[])
         buildKdTree(cloudV, cloudN, tree);
     });
 
+    const Eigen::RowVector3d red(0.8,0.2,0.2), blue(0.2,0.2,0.8);
     // Hide wireframe
     viewer.data().show_lines = false;
-    viewer.data().add_points(cloudV, Eigen::RowVector3d(0, 0, 0));
+    // viewer.data().add_points(cloudV, red);
+
+    const Eigen::RowVector3d query_pt{-10.0, 0.5, 75.0};
+    constexpr int k = 10;
+
+    Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
+
+    for(int neighbor_idx : tree.k_nearest_neighbors(0, k)) {
+        std::cout << neighbor_idx << ", ";
+        cloudC.row(neighbor_idx) = red;
+    }
+
+    viewer.data().add_points(cloudV, cloudC);
+
     viewer.launch();
 
     //Bounding Box (used in the slicer)
     // lower = cloudV.colwise().minCoeff();
     // upper = cloudV.colwise().maxCoeff();
+
+    // viewer.data().add_edges(V + PD1*avg, V - PD1*avg, red);
 }
 
