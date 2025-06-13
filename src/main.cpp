@@ -109,21 +109,6 @@ void estimateDifferentialQuantities(const std::string& name, Eigen::MatrixXd& dm
             proj.row( i )   = mlsPos - tree.points()[i].pos();
         });
     });
-
-    // measureTime( "[Polyscope] Update differential quantities",
-    //      [&name, &mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]() {
-    //          cloud->addScalarQuantity(name + " - Mean Curvature", mean)->setMapRange({-10,10});
-    //          cloud->addScalarQuantity(name + " - K1", kmin)->setMapRange({-10,10});
-    //          cloud->addScalarQuantity(name + " - K2", kmax)->setMapRange({-10,10});
-    //
-    //          cloud->addVectorQuantity(name + " - normal", normal)->setVectorLengthScale(
-    //                  Scalar(2) * pointRadius);
-    //          cloud->addVectorQuantity(name + " - K1 direction", dmin)->setVectorLengthScale(
-    //                  Scalar(2) * pointRadius);
-    //          cloud->addVectorQuantity(name + " - K2 direction", dmax)->setVectorLengthScale(
-    //                  Scalar(2) * pointRadius);
-    //          cloud->addVectorQuantity(name + " - projection", proj, polyscope::VectorType::AMBIENT);
-    // });
 }
 
 
@@ -151,7 +136,6 @@ int main(int argc, char *argv[])
     measureTime( "[libIGL] Load Demo Mesh", []()
     {
         std::string filename = "../assets/bunny.obj";
-        // std::string filename = "../assets/GrosNuage30M.ply";
         readMesh(filename);
         igl::per_vertex_normals(cloudV, meshF, cloudN);
     } );
@@ -168,26 +152,25 @@ int main(int argc, char *argv[])
     // Plot the mesh
     igl::opengl::glfw::Viewer viewer;
     viewer.data().set_mesh(cloudV, meshF);
-    // viewer.data().set_face_based(true);
+    // viewer.data().set_face_based(true); // Flat shading
 
     // Build Ponca KdTree
     measureTime( "[Ponca] Build KdTree", []() {
         buildKdTree(cloudV, cloudN, tree);
     });
 
-    const Eigen::RowVector3d red(0.8,0.2,0.2), blue(0.2,0.2,0.8);
+    const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8);
     // Hide wireframe
     viewer.data().show_lines = false;
-    // viewer.data().add_points(cloudV, red);
 
     const Eigen::RowVector3d query_pt{-10.0, 0.5, 75.0};
     constexpr int k = 10;
 
     Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
+    cloudC.row(0) = red;
 
     for(int neighbor_idx : tree.k_nearest_neighbors(0, k)) {
-        std::cout << neighbor_idx << ", ";
-        cloudC.row(neighbor_idx) = red;
+        cloudC.row(neighbor_idx) = orange;
     }
 
     int nvert = tree.samples().size();
@@ -205,13 +188,8 @@ int main(int argc, char *argv[])
         Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
     estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
     viewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
+    viewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
 
     viewer.launch();
-
-    //Bounding Box (used in the slicer)
-    // lower = cloudV.colwise().minCoeff();
-    // upper = cloudV.colwise().maxCoeff();
-
-    // viewer.data().add_edges(V + PD1*avg, V - PD1*avg, red);
 }
 
