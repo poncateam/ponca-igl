@@ -5,6 +5,7 @@ This Source Code Form is subject to the terms of the Mozilla Public
 */
 
 #include <igl/opengl/glfw/Viewer.h>
+#include <igl/avg_edge_length.h>
 #include <iostream>
 #include <chrono>
 #include <igl/readOBJ.h>
@@ -29,7 +30,6 @@ using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightK
 Eigen::MatrixXd cloudV, cloudN;
 Eigen::MatrixXi meshF;
 KdTree tree;
-KnnGraph* knnGraph {nullptr};
 
 float NSize        = 0.1;   /// < neighborhood size (euclidean)
 Scalar pointRadius = 0.005; /// < display radius of the point cloud
@@ -45,6 +45,13 @@ void measureTime( const std::string &actionName, Functor F ){
     F(); // run process
     const auto end = std::chrono::steady_clock::now();
     std::cout << actionName << " in " << (end - start) / 1ms << "ms.\n";
+}
+
+template <typename Functor>
+void processRangeNeighbors(int i, Functor f){
+    for (int j : tree.range_neighbors(i, NSize)){
+        f(j);
+    }
 }
 
 /// Generic processing function: traverse point cloud, compute fitting, and use functor to process fitting output
@@ -80,16 +87,16 @@ void processPointCloud(const typename FitT::WeightFunction& w, Functor f){
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
 template<typename FitT>
-void estimateDifferentialQuantities_impl(const std::string& name) {
+void estimateDifferentialQuantities(const std::string& name, Eigen::MatrixXd& dmin, Eigen::MatrixXd& dmax ) {
     int nvert = tree.samples().size();
     Eigen::VectorXd mean ( nvert ), kmin ( nvert ), kmax ( nvert );
-    Eigen::MatrixXd normal( nvert, 3 ), dmin( nvert, 3 ), dmax( nvert, 3 ), proj( nvert, 3 );
+    Eigen::MatrixXd normal( nvert, 3 ), proj( nvert, 3 );
 
     measureTime( "[Ponca] Compute differential quantities using " + name,
                  [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]() {
         processPointCloud<FitT>(SmoothWeightFunc(NSize),
                                 [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]
-                                ( int i, const FitT& fit, const VectorType& mlsPos){
+                                ( const int i, const FitT& fit, const VectorType& mlsPos){
 
             mean(i) = fit.kMean();
             kmax(i) = fit.kmax();
@@ -183,7 +190,21 @@ int main(int argc, char *argv[])
         cloudC.row(neighbor_idx) = red;
     }
 
+    int nvert = tree.samples().size();
+    Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
+    const double avg = igl::avg_edge_length(cloudV, meshF);
+
     viewer.data().add_points(cloudV, cloudC);
+
+    // Curvature estimation
+    using FitPlane = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit>;
+    using FitPlaneDiff = Ponca::BasketDiff<
+        FitPlane,
+        Ponca::DiffType::FitSpaceDer,
+        Ponca::CovariancePlaneDer,
+        Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+    estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
+    viewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
 
     viewer.launch();
 

@@ -52,8 +52,7 @@ private:
 
 
 template<typename KdTreeType>
-void
-buildKdTree(const Eigen::MatrixXd& cloudV, const Eigen::MatrixXd& cloudN, KdTreeType& tree){
+void buildKdTree(const Eigen::MatrixXd& cloudV, const Eigen::MatrixXd& cloudN, KdTreeType& tree){
     std::vector<int> ids(cloudV.rows());
     std::iota(ids.begin(), ids.end(), 0);
 
