@@ -12,6 +12,11 @@ This Source Code Form is subject to the terms of the Mozilla Public
 #include <igl/readPLY.h>
 #include <igl/per_vertex_normals.h>
 
+
+#include <igl/opengl/glfw/imgui/ImGuiPlugin.h>
+#include <igl/opengl/glfw/imgui/ImGuiMenu.h>
+#include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
+
 #include <Ponca/Fitting>
 #include <Ponca/SpatialPartitioning>
 #include "poncaAdapters.hpp"
@@ -151,20 +156,50 @@ int main(int argc, char *argv[])
 
     // Plot the mesh
     igl::opengl::glfw::Viewer viewer;
+
+    // Attach a menu plugin
+    igl::opengl::glfw::imgui::ImGuiPlugin plugin;
+    viewer.plugins.push_back(&plugin);
+    igl::opengl::glfw::imgui::ImGuiMenu menu;
+    plugin.widgets.push_back(&menu);
+
+    const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8);
+    static int k = 10;
+
+    // Add content to the default menu window
+    menu.callback_draw_viewer_menu = [&]()
+    {
+        // Draw parent menu content
+        menu.draw_viewer_menu();
+
+        // Add new group
+        if (ImGui::CollapsingHeader("Ponca", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+          // Expose an enumeration type
+          enum Orientation { Up=0, Down, Left, Right };
+          static Orientation dir = Up;
+          ImGui::Combo("Type", (int *)(&dir), "Up\0Down\0Left\0Right\0\0");
+
+          // We can also use a std::vector<std::string> defined dynamically
+          static std::vector<std::string> choices;
+          static int idx_choice = 0;
+          if (ImGui::InputInt("k", &k))
+          {
+            k = std::max(1, k);
+          }
+           ImGui::Combo("Letter", &idx_choice, choices);
+        }
+    };
+
+
+
     viewer.data().set_mesh(cloudV, meshF);
-    // viewer.data().set_face_based(true); // Flat shading
+    viewer.data().show_lines = false;
 
     // Build Ponca KdTree
     measureTime( "[Ponca] Build KdTree", []() {
         buildKdTree(cloudV, cloudN, tree);
     });
-
-    const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8);
-    // Hide wireframe
-    viewer.data().show_lines = false;
-
-    const Eigen::RowVector3d query_pt{-10.0, 0.5, 75.0};
-    constexpr int k = 10;
 
     Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
     cloudC.row(0) = red;
