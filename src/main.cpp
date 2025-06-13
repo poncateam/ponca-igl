@@ -175,6 +175,24 @@ int main(int argc, char *argv[])
         // Add new group
         if (ImGui::CollapsingHeader("Ponca", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            if (ImGui::Button("Load point cloud", ImVec2(-1,0)))
+            {
+                // TODO : clear the previous mesh when a new mesh is added, as well as the overlays
+                // viewer.data().clear_points();
+                // viewer.data().clear_edges();
+
+                std::cout << "Loading mesh\n";
+                cloudV = viewer.data().V;
+                meshF  = viewer.data().F;
+                // Build Ponca KdTree
+                measureTime( "[Ponca] Build KdTree", []() {
+                    buildKdTree(cloudV, cloudN, tree);
+                });
+
+                Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
+                viewer.data().add_points(cloudV, cloudC);
+                viewer.data().point_size *= 0.3;
+            }
           // Expose an enumeration type
           enum Orientation { Up=0, Down, Left, Right };
           static Orientation dir = Up;
@@ -190,7 +208,6 @@ int main(int argc, char *argv[])
            ImGui::Combo("Letter", &idx_choice, choices);
         }
     };
-
 
 
     viewer.data().set_mesh(cloudV, meshF);
@@ -213,6 +230,7 @@ int main(int argc, char *argv[])
     const double avg = igl::avg_edge_length(cloudV, meshF);
 
     viewer.data().add_points(cloudV, cloudC);
+    viewer.data().point_size *= 0.3;
 
     // Curvature estimation
     using FitPlane = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit>;
