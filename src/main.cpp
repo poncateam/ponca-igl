@@ -208,8 +208,8 @@ int main(int argc, char *argv[])
     static int k = 10;
 
     // Select a curvature estimation
-    enum FittingType { ASO=0, APSS, PSS};
-    static FittingType fitType = PSS;
+    enum FittingType { NONE=0, ASO, APSS, PSS};
+    static FittingType fitType = NONE;
 
     // Add content to the default menu window
     menu.callback_draw_viewer_menu = [&]()
@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
                 poncaViewer.data().add_points(cloudV, cloudC);
             }
 
-            ImGui::Combo("Type", (int *)(&fitType), "ASO\0APSS\0PSS\0\0");
+            ImGui::Combo("Fit type", (int *)(&fitType), "NONE\0ASO\0APSS\0PSS\0\0");
 
             // Update the estimation preview
             if (ImGui::Button("Update curvatures"))
@@ -253,18 +253,25 @@ int main(int argc, char *argv[])
                 poncaViewer.data().clear_edges();
                 switch (fitType)
                 {
+                case NONE:
+
+                    break;
                 case ASO:
                     estimateDifferentialQuantities<FitASODiff>("ASO", dmin, dmax);
+                    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
+                    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
                     break;
                 case APSS:
                     estimateDifferentialQuantities<FitAPSSDiff>("APSS", dmin, dmax);
+                    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
+                    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
                     break;
                 case PSS:
                     estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
+                    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
+                    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
                     break;
                 }
-                poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
-                poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
             }
         }
     };
