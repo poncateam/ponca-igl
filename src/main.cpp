@@ -94,8 +94,9 @@ void processPointCloud(const typename FitT::WeightFunction& w, Functor f){
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
 template<typename FitT>
-void estimateDifferentialQuantities(const std::string& name, Eigen::MatrixXd& dmin, Eigen::MatrixXd& dmax ) {
+void estimateDifferentialQuantities( const std::string& name ) {
     int nvert = tree.samples().size();
+    Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
     Eigen::VectorXd mean ( nvert ), kmin ( nvert ), kmax ( nvert );
     Eigen::MatrixXd normal( nvert, 3 ), proj( nvert, 3 );
 
@@ -116,15 +117,20 @@ void estimateDifferentialQuantities(const std::string& name, Eigen::MatrixXd& dm
             proj.row( i )   = mlsPos - tree.points()[i].pos();
         });
     });
+    const double avg = igl::avg_edge_length(cloudV, meshF);
+
+    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
+    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
 }
 
-class PluginPoncaGUI : public igl::opengl::glfw::ViewerPlugin
+class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 {
     IGL_INLINE virtual bool post_load() override
     {
-        // TODO : clear the previous mesh when a new mesh is added, as well as the overlays
-        poncaViewer.data().clear_points();
-        poncaViewer.data().clear_edges();
+        // Clear the previous mesh when a new mesh is added, as well as the overlays
+        if(poncaViewer.data_list.size() > 1)
+            poncaViewer.erase_mesh(0);
+
 
         // Retrieve mesh information
         cloudV = poncaViewer.data().V;
@@ -143,7 +149,11 @@ class PluginPoncaGUI : public igl::opengl::glfw::ViewerPlugin
         // Overlay settings
         poncaViewer.data().point_size *= 0.3;
         poncaViewer.data().show_lines = false;
-        return true;
+        return false;
+    }
+    IGL_INLINE virtual bool mouse_down(int /*button*/, int /*modifier*/) override
+    {
+        return false;
     }
 };
 
@@ -202,9 +212,6 @@ int main(int argc, char *argv[])
     }
 
 
-    int nvert = tree.samples().size();
-    Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
-    const double avg = igl::avg_edge_length(cloudV, meshF);
     static int k = 10;
 
     // Select a curvature estimation
@@ -245,38 +252,27 @@ int main(int argc, char *argv[])
                 poncaViewer.data().add_points(cloudV, cloudC);
             }
 
-            ImGui::Combo("Fit type", (int *)(&fitType), "NONE\0ASO\0APSS\0PSS\0\0");
+            ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "NONE\0ASO\0APSS\0PSS\0\0");
 
             // Update the estimation preview
-            if (ImGui::Button("Update curvatures"))
-            {
+            if (ImGui::Button("Update curvatures")) {
                 poncaViewer.data().clear_edges();
-                switch (fitType)
-                {
-                case NONE:
-
-                    break;
-                case ASO:
-                    estimateDifferentialQuantities<FitASODiff>("ASO", dmin, dmax);
-                    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
-                    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
-                    break;
-                case APSS:
-                    estimateDifferentialQuantities<FitAPSSDiff>("APSS", dmin, dmax);
-                    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
-                    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
-                    break;
-                case PSS:
-                    estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
-                    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
-                    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
-                    break;
+                switch (fitType) {
+                    case NONE:
+                        break;
+                    case ASO:
+                        estimateDifferentialQuantities<FitASODiff>("ASO");
+                        break;
+                    case APSS:
+                        estimateDifferentialQuantities<FitAPSSDiff>("APSS");
+                        break;
+                    case PSS:
+                        estimateDifferentialQuantities<FitPlaneDiff>("PSS");
+                        break;
                 }
             }
         }
     };
-
-
 
     poncaViewer.launch();
 }
