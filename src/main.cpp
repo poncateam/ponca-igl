@@ -23,6 +23,8 @@ This Source Code Form is subject to the terms of the Mozilla Public
 
 #include <igl/principal_curvature.h>
 
+#include "igl/unproject_onto_mesh.h"
+
 using Scalar             = double;
 using VectorType         = Eigen::Vector<Scalar, 3>;
 using PPAdapter          = BlockPointAdapter<Scalar>;
@@ -40,7 +42,7 @@ igl::opengl::glfw::Viewer poncaViewer;
 float NSize        = 0.1;   /// < neighborhood size (euclidean)
 Scalar pointRadius = 0.005; /// < display radius of the point cloud
 int mlsIter        = 3;     /// < number of moving least squares iterations
-const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8);
+const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8), green(0.2,0.8,0.2);
 
 /// Convenience function measuring and printing the processing time of F
 template <typename Functor>
@@ -213,11 +215,46 @@ int main(int argc, char *argv[])
 
 
     static int k = 10;
+    int selected_pid = 0;
 
     // Select a curvature estimation
     enum FittingType { NONE=0, ASO, APSS, PSS};
     static FittingType fitType = NONE;
+    poncaViewer.callback_mouse_down =
+        [&selected_pid](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+        {
+            int fid;
+            Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
+            Eigen::Vector3f bc;
+            // Cast a ray in the view direction starting from the mouse position
+            double x = poncaViewer.current_mouse_x;
+            double y = poncaViewer.core().viewport(3) - poncaViewer.current_mouse_y;
+            if(igl::unproject_onto_mesh(Eigen::Vector2f(x,y), poncaViewer.core().view,
 
+              poncaViewer.core().proj, poncaViewer.core().viewport, cloudV, meshF, fid, bc))
+            {
+                const auto& tri = meshF.row(fid);
+                const auto& v0 = cloudV.row(tri[0]);
+                const auto& v1 = cloudV.row(tri[1]);
+                const auto& v2 = cloudV.row(tri[2]);
+                Eigen::RowVector3d query_pt = bc[0] * v0 + bc[1] * v1 + bc[2] * v2;
+
+                selected_pid = *tree.nearest_neighbor(query_pt).begin();
+                std::cout << query_pt;
+                // paint hit red
+                cloudC.row(selected_pid) = red;
+                poncaViewer.data().clear_points();
+                poncaViewer.data().add_points(cloudV, cloudC);
+
+
+                return true;
+            }
+            return false;
+        };
+        std::cout<<R"(Usage:
+      [click]  Pick face on shape
+
+    )";
     // Add content to the default menu window
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -229,23 +266,23 @@ int main(int argc, char *argv[])
         {
 
             // We can also use a std::vector<std::string> defined dynamically
-            static std::vector<std::string> choices;
-            static int idx_choice = 0;
-            if (ImGui::InputInt("k", &k))
-            {
+            if (ImGui::InputInt("k", &k)) {
                 k = std::max(1, k);
             }
-            ImGui::Combo("k", &idx_choice, choices);
+            // We can also use a std::vector<std::string> defined dynamically
+            if (ImGui::InputInt("Selected point id", &selected_pid)) {
+                selected_pid = std::max(-1, selected_pid);
+            }
 
 
-            if (ImGui::Button("Colorise Neighbors", ImVec2(-1,0)))
+            if (ImGui::Button("Colorize Neighbors", ImVec2(-1,0)) && selected_pid > 0)
             {
                 poncaViewer.data().clear_points();
 
                 Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
-                cloudC.row(0) = red;
+                cloudC.row(selected_pid) = red;
 
-                for(int neighbor_idx : tree.k_nearest_neighbors(0, k)) {
+                for(int neighbor_idx : tree.k_nearest_neighbors(selected_pid, k)) {
                     cloudC.row(neighbor_idx) = orange;
                 }
 
