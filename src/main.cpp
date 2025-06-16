@@ -35,10 +35,12 @@ using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightK
 Eigen::MatrixXd cloudV, cloudN;
 Eigen::MatrixXi meshF;
 KdTree tree;
+igl::opengl::glfw::Viewer poncaViewer;
 
 float NSize        = 0.1;   /// < neighborhood size (euclidean)
 Scalar pointRadius = 0.005; /// < display radius of the point cloud
 int mlsIter        = 3;     /// < number of moving least squares iterations
+const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8);
 
 /// Convenience function measuring and printing the processing time of F
 template <typename Functor>
@@ -116,35 +118,55 @@ void estimateDifferentialQuantities(const std::string& name, Eigen::MatrixXd& dm
     });
 }
 
-
-bool endsWith (std::string const &fullString, std::string const &ending) {
-    if (fullString.length() >= ending.length()) {
-        return (0 == fullString.compare (fullString.length() - ending.length(), ending.length(), ending));
-    } else {
-        return false;
-    }
-}
-
-void readMesh( const std::string filename) {
-    if (endsWith(filename, ".obj"))
+class PluginPoncaGUI : public igl::opengl::glfw::ViewerPlugin
+{
+    IGL_INLINE virtual bool post_load() override
     {
-        igl::readOBJ(filename, cloudV, meshF);
-    } else if (endsWith(filename, ".ply"))
-    {
-        igl::readPLY(filename, cloudV, meshF);
+        // TODO : clear the previous mesh when a new mesh is added, as well as the overlays
+        poncaViewer.data().clear_points();
+        poncaViewer.data().clear_edges();
+
+        // Retrieve mesh information
+        cloudV = poncaViewer.data().V;
+        meshF  = poncaViewer.data().F;
+
+        // Build Ponca KdTree
+        measureTime( "[Ponca] Build KdTree", []() {
+            buildKdTree(cloudV, cloudN, tree);
+        });
+
+        // Display point clouds
+        Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1); // Color
+        poncaViewer.data().add_points(cloudV, cloudC);
+
+        // Overlay settings
+        poncaViewer.data().point_size *= 0.3;
+        poncaViewer.data().show_lines = false;
+        return true;
     }
-    igl::per_vertex_normals(cloudV, meshF, cloudN);
-}
+};
 
 int main(int argc, char *argv[])
 {
-    measureTime( "[libIGL] Load Demo Mesh", []()
-    {
-        std::string filename = "../assets/bunny.obj";
-        readMesh(filename);
-        igl::per_vertex_normals(cloudV, meshF, cloudN);
-    } );
+    // Attach a plugin
+    igl::opengl::glfw::imgui::ImGuiPlugin plugin;
+    poncaViewer.plugins.push_back(&plugin);
+    igl::opengl::glfw::imgui::ImGuiMenu menu;
+    plugin.widgets.push_back(&menu);
 
+    PluginPoncaGUI pluginPonca;
+    poncaViewer.plugins.push_back(&pluginPonca);
+
+    std::string demo_filename = "../assets/bunny.obj";
+    // Plot the mesh
+
+    if (! poncaViewer.load_mesh_from_file(demo_filename))
+    {
+        poncaViewer.open_dialog_load_mesh();
+    }
+    cloudV = poncaViewer.data().V;
+    meshF  = poncaViewer.data().F;
+    cloudN  = poncaViewer.data().V_normals;
 
     // Check if normals have been properly loaded
     int nbUnitNormal = cloudN.rowwise().squaredNorm().sum();
@@ -154,16 +176,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // Plot the mesh
-    igl::opengl::glfw::Viewer viewer;
 
-    // Attach a menu plugin
-    igl::opengl::glfw::imgui::ImGuiPlugin plugin;
-    viewer.plugins.push_back(&plugin);
-    igl::opengl::glfw::imgui::ImGuiMenu menu;
-    plugin.widgets.push_back(&menu);
-
-    const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8);
     static int k = 10;
 
     // Add content to the default menu window
@@ -175,62 +188,41 @@ int main(int argc, char *argv[])
         // Add new group
         if (ImGui::CollapsingHeader("Ponca", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::Button("Load point cloud", ImVec2(-1,0)))
-            {
-                // TODO : clear the previous mesh when a new mesh is added, as well as the overlays
-                // viewer.data().clear_points();
-                // viewer.data().clear_edges();
 
-                std::cout << "Loading mesh\n";
-                cloudV = viewer.data().V;
-                meshF  = viewer.data().F;
-                // Build Ponca KdTree
-                measureTime( "[Ponca] Build KdTree", []() {
-                    buildKdTree(cloudV, cloudN, tree);
-                });
+            // We can also use a std::vector<std::string> defined dynamically
+            static std::vector<std::string> choices;
+            static int idx_choice = 0;
+            if (ImGui::InputInt("k", &k))
+            {
+                k = std::max(1, k);
+            }
+            ImGui::Combo("k", &idx_choice, choices);
+
+
+            if (ImGui::Button("Colorise Neighbors", ImVec2(-1,0)))
+            {
+                poncaViewer.data().clear_points();
 
                 Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
-                viewer.data().add_points(cloudV, cloudC);
-                viewer.data().point_size *= 0.3;
-            }
-          // Expose an enumeration type
-          enum Orientation { Up=0, Down, Left, Right };
-          static Orientation dir = Up;
-          ImGui::Combo("Type", (int *)(&dir), "Up\0Down\0Left\0Right\0\0");
+                cloudC.row(0) = red;
 
-          // We can also use a std::vector<std::string> defined dynamically
-          static std::vector<std::string> choices;
-          static int idx_choice = 0;
-          if (ImGui::InputInt("k", &k))
-          {
-            k = std::max(1, k);
-          }
-           ImGui::Combo("Letter", &idx_choice, choices);
+                for(int neighbor_idx : tree.k_nearest_neighbors(0, k)) {
+                    cloudC.row(neighbor_idx) = orange;
+                }
+
+                poncaViewer.data().add_points(cloudV, cloudC);
+            }
+
+            // Expose an enumeration type
+            enum Orientation { Up=0, Down, Left, Right };
+            static Orientation dir = Up;
+            ImGui::Combo("Type", (int *)(&dir), "Up\0Down\0Left\0Right\0\0");
         }
     };
-
-
-    viewer.data().set_mesh(cloudV, meshF);
-    viewer.data().show_lines = false;
-
-    // Build Ponca KdTree
-    measureTime( "[Ponca] Build KdTree", []() {
-        buildKdTree(cloudV, cloudN, tree);
-    });
-
-    Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
-    cloudC.row(0) = red;
-
-    for(int neighbor_idx : tree.k_nearest_neighbors(0, k)) {
-        cloudC.row(neighbor_idx) = orange;
-    }
 
     int nvert = tree.samples().size();
     Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
     const double avg = igl::avg_edge_length(cloudV, meshF);
-
-    viewer.data().add_points(cloudV, cloudC);
-    viewer.data().point_size *= 0.3;
 
     // Curvature estimation
     using FitPlane = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit>;
@@ -240,9 +232,9 @@ int main(int argc, char *argv[])
         Ponca::CovariancePlaneDer,
         Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
     estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
-    viewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
-    viewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
+    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
+    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
 
-    viewer.launch();
+    poncaViewer.launch();
 }
 
