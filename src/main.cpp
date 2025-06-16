@@ -157,6 +157,30 @@ int main(int argc, char *argv[])
     PluginPoncaGUI pluginPonca;
     poncaViewer.plugins.push_back(&pluginPonca);
 
+    ////////// Fitting type for curvature estimation //////////
+    using FitPlane = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit>;
+    using FitPlaneDiff = Ponca::BasketDiff<
+            FitPlane,
+            Ponca::DiffType::FitSpaceDer,
+            Ponca::CovariancePlaneDer,
+            Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+
+    using FitAPSS = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::OrientedSphereFit>;
+    using FitAPSSDiff = Ponca::BasketDiff<
+            FitAPSS,
+            Ponca::DiffType::FitSpaceDer,
+            Ponca::OrientedSphereDer,
+            Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+
+    using FitASO = FitAPSS;
+    using FitASODiff = Ponca::BasketDiff<
+            FitASO,
+            Ponca::DiffType::FitSpaceDer,
+            Ponca::OrientedSphereDer, Ponca::MlsSphereFitDer,
+            Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+
+    ////////////////////////////////////////
+
     std::string demo_filename = "../assets/bunny.obj";
     // Plot the mesh
 
@@ -177,6 +201,9 @@ int main(int argc, char *argv[])
     }
 
 
+    int nvert = tree.samples().size();
+    Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
+    const double avg = igl::avg_edge_length(cloudV, meshF);
     static int k = 10;
 
     // Add content to the default menu window
@@ -213,24 +240,31 @@ int main(int argc, char *argv[])
                 poncaViewer.data().add_points(cloudV, cloudC);
             }
 
-            // Expose an enumeration type
-            enum Orientation { Up=0, Down, Left, Right };
-            static Orientation dir = Up;
-            ImGui::Combo("Type", (int *)(&dir), "Up\0Down\0Left\0Right\0\0");
+            // Select a curvature estimation
+            enum FittingType { ASO=0, APSS, PSS};
+            static FittingType fitType = ASO;
+            ImGui::Combo("Type", (int *)(&fitType), "ASO\0APSS\0PSS\0\0");
+            if (ImGui::Button("Update"))
+            {
+                poncaViewer.data().clear_edges();
+                switch (fitType)
+                {
+                case ASO:
+                    estimateDifferentialQuantities<FitASODiff>("ASO", dmin, dmax);
+                    break;
+                case APSS:
+                    estimateDifferentialQuantities<FitAPSSDiff>("APSS", dmin, dmax);
+                    break;
+                case PSS:
+                    estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
+                    break;
+                }
+            }
         }
     };
 
-    int nvert = tree.samples().size();
-    Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
-    const double avg = igl::avg_edge_length(cloudV, meshF);
 
     // Curvature estimation
-    using FitPlane = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit>;
-    using FitPlaneDiff = Ponca::BasketDiff<
-        FitPlane,
-        Ponca::DiffType::FitSpaceDer,
-        Ponca::CovariancePlaneDer,
-        Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
     estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
     poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
     poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
