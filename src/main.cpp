@@ -129,6 +129,7 @@ class PluginPoncaGUI : public igl::opengl::glfw::ViewerPlugin
         // Retrieve mesh information
         cloudV = poncaViewer.data().V;
         meshF  = poncaViewer.data().F;
+        cloudN  = poncaViewer.data().V_normals;
 
         // Build Ponca KdTree
         measureTime( "[Ponca] Build KdTree", []() {
@@ -136,7 +137,7 @@ class PluginPoncaGUI : public igl::opengl::glfw::ViewerPlugin
         });
 
         // Display point clouds
-        Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1); // Color
+        const Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1); // Color
         poncaViewer.data().add_points(cloudV, cloudC);
 
         // Overlay settings
@@ -206,6 +207,10 @@ int main(int argc, char *argv[])
     const double avg = igl::avg_edge_length(cloudV, meshF);
     static int k = 10;
 
+    // Select a curvature estimation
+    enum FittingType { ASO=0, APSS, PSS};
+    static FittingType fitType = PSS;
+
     // Add content to the default menu window
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -240,11 +245,10 @@ int main(int argc, char *argv[])
                 poncaViewer.data().add_points(cloudV, cloudC);
             }
 
-            // Select a curvature estimation
-            enum FittingType { ASO=0, APSS, PSS};
-            static FittingType fitType = ASO;
             ImGui::Combo("Type", (int *)(&fitType), "ASO\0APSS\0PSS\0\0");
-            if (ImGui::Button("Update"))
+
+            // Update the estimation preview
+            if (ImGui::Button("Update curvatures"))
             {
                 poncaViewer.data().clear_edges();
                 switch (fitType)
@@ -259,15 +263,13 @@ int main(int argc, char *argv[])
                     estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
                     break;
                 }
+                poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
+                poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
             }
         }
     };
 
 
-    // Curvature estimation
-    estimateDifferentialQuantities<FitPlaneDiff>("PSS", dmin, dmax);
-    poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
-    poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
 
     poncaViewer.launch();
 }
