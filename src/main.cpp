@@ -110,6 +110,18 @@ void colorMapPointCloudScalars(Eigen::VectorXd scalars) {
     }
     poncaViewer.data().add_points(cloudV, cloudC);
 
+    // Add the labels near the points
+    poncaViewer.data().clear_labels();
+
+    for (int i = 0; i < scalars.size(); ++i) {
+        std::stringstream l1;
+        l1 << scalars(i) ;
+        Eigen::Vector3d position = cloudV.row(i).transpose();  // from row (1x3) to column (3x1)
+        Eigen::Vector3d offset = cloudN.row(i).transpose() * 0.0005;
+        position += offset;              // apply offset
+
+        poncaViewer.data().add_label(position, l1.str());
+    }
 }
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
