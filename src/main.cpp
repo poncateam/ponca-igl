@@ -93,11 +93,30 @@ void processPointCloud(const typename FitT::WeightFunction& w, Functor f){
     }
 }
 
+template<igl::ColorMapType cm>
+void colorMapPointCloudScalars(Eigen::VectorXd scalars) {
+    poncaViewer.data().clear_points();
+
+    double minVal = scalars.minCoeff();
+    double maxVal = scalars.maxCoeff();
+    Eigen::VectorXd normalized = (scalars.array() - minVal) / (maxVal - minVal + 1e-12); // prevent divide by zero
+    Eigen::MatrixXd cloudC(scalars.size(), 3);
+
+    for (int i = 0; i < scalars.size(); ++i) {
+        // Use igl::ColorMapType::JET, or other types like HOT, COOL, etc.
+        Eigen::VectorXd rgb(3);
+        igl::colormap(cm, normalized[i], rgb[0], rgb[1], rgb[2]);
+        cloudC.row(i) = rgb;
+    }
+    poncaViewer.data().add_points(cloudV, cloudC);
+
+}
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
 template<typename FitT>
 void estimateDifferentialQuantities( const std::string& name ) {
     int nvert = tree.samples().size();
+    // const Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1); // Color
     Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
     Eigen::VectorXd mean ( nvert ), kmin ( nvert ), kmax ( nvert );
     Eigen::MatrixXd normal( nvert, 3 ), proj( nvert, 3 );
@@ -123,7 +142,11 @@ void estimateDifferentialQuantities( const std::string& name ) {
 
     poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
     poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
+
+    colorMapPointCloudScalars<igl::ColorMapType::COLOR_MAP_TYPE_TURBO>(mean );
 }
+
+
 
 class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 {
@@ -241,7 +264,7 @@ int main(int argc, char *argv[])
 
                 selected_pid = *tree.nearest_neighbor(query_pt).begin();
                 std::cout << query_pt;
-                // paint hit red
+                // Paint the selected point red
                 cloudC.row(selected_pid) = red;
                 poncaViewer.data().clear_points();
                 poncaViewer.data().add_points(cloudV, cloudC);
@@ -264,6 +287,7 @@ int main(int argc, char *argv[])
         // Add new group
         if (ImGui::CollapsingHeader("Ponca", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
 
             // We can also use a std::vector<std::string> defined dynamically
             if (ImGui::InputInt("k", &k)) {
@@ -279,9 +303,9 @@ int main(int argc, char *argv[])
             {
                 poncaViewer.data().clear_points();
 
-                Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
                 cloudC.row(selected_pid) = red;
 
+                // Paint the neighbors orange
                 for(int neighbor_idx : tree.k_nearest_neighbors(selected_pid, k)) {
                     cloudC.row(neighbor_idx) = orange;
                 }
@@ -296,6 +320,8 @@ int main(int argc, char *argv[])
                 poncaViewer.data().clear_edges();
                 switch (fitType) {
                     case NONE:
+                        poncaViewer.data().clear_points();
+                        poncaViewer.data().add_points(cloudV, cloudC);
                         break;
                     case ASO:
                         estimateDifferentialQuantities<FitASODiff>("ASO");
