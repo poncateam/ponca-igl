@@ -32,6 +32,8 @@ using KdTree             = Ponca::KdTreeSparse<PPAdapter>;
 using KnnGraph           = Ponca::KnnGraph<PPAdapter>;
 using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightKernel<Scalar> >;
 
+enum FittingType { NONE=0, ASO, APSS, PSS };
+enum DisplayedScalar { MEAN, MIN, MAX };
 
 // KdTree tree;
 Eigen::MatrixXd cloudV, cloudN;
@@ -126,14 +128,14 @@ void colorMapPointCloudScalars(Eigen::VectorXd scalars) {
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
 template<typename FitT>
-void estimateDifferentialQuantities( const std::string& name ) {
+void estimateDifferentialQuantities( DisplayedScalar displayedScalar ) {
     int nvert = tree.samples().size();
-    // const Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1); // Color
+
     Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
     Eigen::VectorXd mean ( nvert ), kmin ( nvert ), kmax ( nvert );
     Eigen::MatrixXd normal( nvert, 3 ), proj( nvert, 3 );
 
-    measureTime( "[Ponca] Compute differential quantities using " + name,
+    measureTime( "Compute differential quantities",
                  [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]() {
         processPointCloud<FitT>(SmoothWeightFunc(NSize),
                                 [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]
@@ -150,12 +152,24 @@ void estimateDifferentialQuantities( const std::string& name ) {
             proj.row( i )   = mlsPos - tree.points()[i].pos();
         });
     });
-    const double avg = igl::avg_edge_length(cloudV, meshF);
 
+    // Show the first and second curvature direction
+    const double avg = igl::avg_edge_length(cloudV, meshF);
     poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, red);
     poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, blue);
 
-    colorMapPointCloudScalars<igl::ColorMapType::COLOR_MAP_TYPE_TURBO>(mean );
+    // Display the scalar computed by the curvature estimator
+    switch (displayedScalar) {
+        case MEAN:
+            colorMapPointCloudScalars<igl::ColorMapType::COLOR_MAP_TYPE_TURBO>(mean );
+            break;
+        case MIN:
+            colorMapPointCloudScalars<igl::ColorMapType::COLOR_MAP_TYPE_TURBO>(kmin );
+            break;
+        case MAX:
+            colorMapPointCloudScalars<igl::ColorMapType::COLOR_MAP_TYPE_TURBO>(kmax );
+            break;
+    }
 }
 
 
@@ -233,9 +247,8 @@ int main(int argc, char *argv[])
     // Plot the mesh
 
     if (! poncaViewer.load_mesh_from_file(demo_filename))
-    {
         poncaViewer.open_dialog_load_mesh();
-    }
+
     cloudV = poncaViewer.data().V;
     meshF  = poncaViewer.data().F;
     cloudN  = poncaViewer.data().V_normals;
@@ -252,9 +265,10 @@ int main(int argc, char *argv[])
     static int k = 10;
     int selected_pid = 0;
 
-    // Select a curvature estimation
-    enum FittingType { NONE=0, ASO, APSS, PSS};
-    static FittingType fitType = NONE;
+    // Curvature estimation parameters
+    static FittingType fitType = FittingType::NONE;
+    static DisplayedScalar displayedScalar = DisplayedScalar::MEAN;
+
     poncaViewer.callback_mouse_down =
         [&selected_pid](igl::opengl::glfw::Viewer& viewer, int, int)->bool
         {
@@ -286,10 +300,6 @@ int main(int argc, char *argv[])
             }
             return false;
         };
-        std::cout<<R"(Usage:
-      [click]  Pick face on shape
-
-    )";
     // Add content to the default menu window
     menu.callback_draw_viewer_menu = [&]()
     {
@@ -326,6 +336,7 @@ int main(int argc, char *argv[])
             }
 
             ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "NONE\0ASO\0APSS\0PSS\0\0");
+            ImGui::Combo("Scalar to show", reinterpret_cast<int*>(&displayedScalar), "MEAN\0MIN\0MAX\0\0");
 
             // Update the estimation preview
             if (ImGui::Button("Update curvatures")) {
@@ -336,13 +347,16 @@ int main(int argc, char *argv[])
                         poncaViewer.data().add_points(cloudV, cloudC);
                         break;
                     case ASO:
-                        estimateDifferentialQuantities<FitASODiff>("ASO");
+                        std::cout << "[Ponca] ASO : ";
+                        estimateDifferentialQuantities<FitASODiff>(displayedScalar);
                         break;
                     case APSS:
-                        estimateDifferentialQuantities<FitAPSSDiff>("APSS");
+                        std::cout << "[Ponca] APSS : ";
+                        estimateDifferentialQuantities<FitAPSSDiff>(displayedScalar);
                         break;
                     case PSS:
-                        estimateDifferentialQuantities<FitPlaneDiff>("PSS");
+                        std::cout << "[Ponca] PSS : ";
+                        estimateDifferentialQuantities<FitPlaneDiff>(displayedScalar);
                         break;
                 }
             }
