@@ -8,9 +8,7 @@ This Source Code Form is subject to the terms of the Mozilla Public
 #include <igl/avg_edge_length.h>
 #include <iostream>
 #include <chrono>
-#include <igl/readOBJ.h>
 #include <igl/readPLY.h>
-#include <igl/per_vertex_normals.h>
 
 
 #include <igl/opengl/glfw/imgui/ImGuiPlugin.h>
@@ -20,8 +18,6 @@ This Source Code Form is subject to the terms of the Mozilla Public
 #include <Ponca/Fitting>
 #include <Ponca/SpatialPartitioning>
 #include "poncaAdapters.hpp"
-
-#include <igl/principal_curvature.h>
 
 #include "igl/unproject_onto_mesh.h"
 
@@ -35,15 +31,20 @@ using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightK
 enum FittingType { NONE=0, ASO, APSS, PSS };
 enum DisplayedScalar { MEAN, MIN, MAX };
 
-// KdTree tree;
-Eigen::MatrixXd cloudV, cloudN, cloudC;
-Eigen::MatrixXi meshF;
-KdTree tree;
+Eigen::MatrixXd cloudV, cloudN, cloudC; // Points position, normals and colors
+Eigen::MatrixXi meshF; // The face of the mesh
 igl::opengl::glfw::Viewer poncaViewer;
 
-float NSize        = 0.1;   /// < neighborhood size (euclidean)
-Scalar pointRadius = 0.005; /// < display radius of the point cloud
-int mlsIter        = 3;     /// < number of moving least squares iterations
+// Building the kdtree
+KdTree tree;
+constexpr float NSize        = 0.1;   /// Neighborhood size used to build the kdtree (euclidean)
+constexpr int mlsIter        = 3;     /// Number of moving least squares iterations
+
+// Kd Tree search
+int k = 10;                 /// Number of neighbors to search for
+int selected_pid = 0;       /// The currently selected point from the point cloud
+
+// Some default colors
 const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8), green(0.2,0.8,0.2);
 
 /// Convenience function measuring and printing the processing time of F
@@ -96,7 +97,7 @@ void processPointCloud(const typename FitT::WeightFunction& w, Functor f){
 }
 
 template<igl::ColorMapType cm>
-void colorMapPointCloudScalars(Eigen::VectorXd scalars) {
+void colorMapPointCloudScalars(Eigen::VectorXd scalars, const bool writeLabel=true) {
     poncaViewer.data().clear_points();
 
     double minVal = scalars.minCoeff();
@@ -111,19 +112,22 @@ void colorMapPointCloudScalars(Eigen::VectorXd scalars) {
     }
     poncaViewer.data().add_points(cloudV, cloudC);
 
+    if (!writeLabel) return;
+
     // Add the labels near the points
     poncaViewer.data().clear_labels();
 
     for (int i = 0; i < scalars.size(); ++i) {
         std::stringstream l1;
         l1 << scalars(i) ;
-        Eigen::Vector3d position = cloudV.row(i).transpose();  // from row (1x3) to column (3x1)
-        Eigen::Vector3d offset = cloudN.row(i).transpose() * 0.0005;
-        position += offset;              // apply offset
+        const Eigen::Vector3d offset = cloudN.row(i).transpose() * 0.0007; // Offset from the normal
+        Eigen::Vector3d position     = cloudV.row(i).transpose();  // from row (1x3) to column (3x1)
+        position += offset;  // apply offset
 
         poncaViewer.data().add_label(position, l1.str());
     }
 }
+
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
 template<typename FitT>
@@ -155,10 +159,10 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
     // Show the first and second curvature direction
     const double avg = igl::avg_edge_length(cloudV, meshF);
     if (showMinCurvatureDir) {
-        poncaViewer.data().add_edges(cloudV + dmin*avg, cloudV - dmin*avg, blue);
+        poncaViewer.data().add_edges(cloudV, cloudV + dmin*avg, blue);
     }
     if (showMaxCurvatureDir) {
-        poncaViewer.data().add_edges(cloudV + dmax*avg, cloudV - dmax*avg, red);
+        poncaViewer.data().add_edges(cloudV, cloudV + dmax*avg, red);
     }
 
     // Display the scalar computed by the curvature estimator
@@ -203,10 +207,33 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
         // Overlay settings
         poncaViewer.data().point_size *= 0.3;
         poncaViewer.data().show_lines = false;
+
         return false;
     }
     IGL_INLINE virtual bool mouse_down(int /*button*/, int /*modifier*/) override
     {
+        int fid;
+        cloudC = blue.replicate(cloudV.rows(), 1);
+        Eigen::Vector3f bc;
+        // Cast a ray in the view direction starting from the mouse position
+        double x = poncaViewer.current_mouse_x;
+        double y = poncaViewer.core().viewport(3) - poncaViewer.current_mouse_y;
+        if(igl::unproject_onto_mesh(Eigen::Vector2f(x,y), poncaViewer.core().view,
+            poncaViewer.core().proj, poncaViewer.core().viewport, cloudV, meshF, fid, bc)) {
+            const auto& tri = meshF.row(fid);
+            const auto& v0 = cloudV.row(tri[0]);
+            const auto& v1 = cloudV.row(tri[1]);
+            const auto& v2 = cloudV.row(tri[2]);
+            const Eigen::RowVector3d query_pt = bc[0] * v0 + bc[1] * v1 + bc[2] * v2;
+
+            selected_pid = *tree.nearest_neighbor(query_pt).begin();
+
+            // Paint the selected point red
+            cloudC.row(selected_pid) = red;
+            poncaViewer.data().clear_points();
+            poncaViewer.data().add_points(cloudV, cloudC);
+            return true;
+        }
         return false;
     }
 };
@@ -243,14 +270,12 @@ int main(int argc, char *argv[])
             Ponca::DiffType::FitSpaceDer,
             Ponca::OrientedSphereDer, Ponca::MlsSphereFitDer,
             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+    //////////////////////////////////////////////////////////
 
-    ////////////////////////////////////////
-
+    // Load the default mesh
     std::string demo_filename = "../assets/bunny.obj";
-    // Plot the mesh
-
     if (! poncaViewer.load_mesh_from_file(demo_filename))
-        poncaViewer.open_dialog_load_mesh();
+        poncaViewer.open_dialog_load_mesh(); // If the default file was not found, we prompt the user to select a file to open
 
     cloudV = poncaViewer.data().V;
     meshF  = poncaViewer.data().F;
@@ -265,86 +290,39 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-
-    static int k = 10;
-    int selected_pid = 0;
-    static bool showMinCurvatureDir = false;
+    poncaViewer.data().show_faces   = false; // Hide de face by default
+    static bool showMinCurvatureDir = false; // Hide the curvatures direction by default
     static bool showMaxCurvatureDir = false;
 
     // Curvature estimation parameters
     static FittingType fitType = FittingType::NONE;
     static DisplayedScalar displayedScalar = DisplayedScalar::MEAN;
 
-    poncaViewer.callback_mouse_down =
-        [&selected_pid](igl::opengl::glfw::Viewer& viewer, int, int)->bool
-        {
-            int fid;
-            cloudC = blue.replicate(cloudV.rows(), 1);
-            Eigen::Vector3f bc;
-            // Cast a ray in the view direction starting from the mouse position
-            double x = poncaViewer.current_mouse_x;
-            double y = poncaViewer.core().viewport(3) - poncaViewer.current_mouse_y;
-            if(igl::unproject_onto_mesh(Eigen::Vector2f(x,y), poncaViewer.core().view,
-
-              poncaViewer.core().proj, poncaViewer.core().viewport, cloudV, meshF, fid, bc))
-            {
-                const auto& tri = meshF.row(fid);
-                const auto& v0 = cloudV.row(tri[0]);
-                const auto& v1 = cloudV.row(tri[1]);
-                const auto& v2 = cloudV.row(tri[2]);
-                Eigen::RowVector3d query_pt = bc[0] * v0 + bc[1] * v1 + bc[2] * v2;
-
-                selected_pid = *tree.nearest_neighbor(query_pt).begin();
-
-                // Paint the selected point red
-                cloudC.row(selected_pid) = red;
-                poncaViewer.data().clear_points();
-                poncaViewer.data().add_points(cloudV, cloudC);
-                return true;
-            }
-            return false;
-        };
-    // Add content to the default menu window
-    menu.callback_draw_viewer_menu = [&]()
-    {
-        // Draw parent menu content
-        menu.draw_viewer_menu();
-    };
-
-    Eigen::MatrixXd cloudC = blue.replicate(cloudV.rows(), 1);
     // Draw additional windows
-    menu.callback_draw_custom_window = [&]()
-    {
-        // Define next window position + size
+    menu.callback_draw_custom_window = [&]() {
+        // Define the ponca window position and size
         ImGui::SetNextWindowPos(ImVec2(180.f * menu.menu_scaling(), 10), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(200, 300), ImGuiCond_FirstUseEver);
-        ImGui::Begin(
-            "Ponca", nullptr,
-            ImGuiWindowFlags_NoSavedSettings
-        );
-        // Add new group
-        if (ImGui::CollapsingHeader("Neighbors search", ImGuiTreeNodeFlags_DefaultOpen))
-        {
+        ImGui::SetNextWindowSize(ImVec2(200, 350), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Ponca", nullptr, ImGuiWindowFlags_NoSavedSettings);
 
+        // Add new group
+        if (ImGui::CollapsingHeader("K-Neighbors search", ImGuiTreeNodeFlags_DefaultOpen)) {
             // The k neighbors
-            if (ImGui::InputInt("k", &k)) {
+            if (ImGui::InputInt("k", &k))
                 k = std::max(1, k);
-            }
 
             // ID of the currently selected point
-            if (ImGui::InputInt("Selected point id", &selected_pid)) {
+            if (ImGui::InputInt("Selected point ID", &selected_pid))
                 selected_pid = std::max(-1, selected_pid);
-            }
 
-
-            if (ImGui::Button("Colorize Neighbors", ImVec2(-1,0)) && selected_pid > 0)
-            {
+            // Start the neighbor search with the kdtree
+            if (ImGui::Button("Colorize Neighbors", ImVec2(-1,0)) && selected_pid > 0) {
                 poncaViewer.data().clear_points();
                 cloudC = blue.replicate(cloudV.rows(), 1);
                 cloudC.row(selected_pid) = red;
 
                 // Paint the neighbors orange
-                for(int neighbor_idx : tree.k_nearest_neighbors(selected_pid, k)) {
+                for(const int neighbor_idx : tree.k_nearest_neighbors(selected_pid, k)) {
                     cloudC.row(neighbor_idx) = orange;
                 }
 
@@ -352,15 +330,14 @@ int main(int argc, char *argv[])
             }
         }
         // Add new group
-        if (ImGui::CollapsingHeader("Curvature estimation", ImGuiTreeNodeFlags_DefaultOpen))
-        {
+        if (ImGui::CollapsingHeader("Curvature estimation", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "NONE\0ASO\0APSS\0PSS\0\0");
-            ImGui::Combo("Scalar to show", reinterpret_cast<int*>(&displayedScalar), "MEAN\0MIN\0MAX\0\0");
+            ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "MEAN\0MIN\0MAX\0\0");
             ImGui::Checkbox("Show min curvature direction", &showMinCurvatureDir);
             ImGui::Checkbox("Show max curvature direction", &showMaxCurvatureDir);
 
             // Update the estimation preview
-            if (ImGui::Button("Update curvatures")) {
+            if (ImGui::Button("Update curvatures estimation")) {
                 poncaViewer.data().clear_edges();
 
                 switch (fitType) {
