@@ -179,8 +179,6 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
     }
 }
 
-
-
 class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 {
     IGL_INLINE virtual bool post_load() override
@@ -210,31 +208,32 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 
         return false;
     }
-    IGL_INLINE virtual bool mouse_down(int /*button*/, int /*modifier*/) override
+    IGL_INLINE virtual bool mouse_down(int button, int /*modifier*/) override
     {
         int fid;
         cloudC = blue.replicate(cloudV.rows(), 1);
         Eigen::Vector3f bc;
         // Cast a ray in the view direction starting from the mouse position
-        double x = poncaViewer.current_mouse_x;
-        double y = poncaViewer.core().viewport(3) - poncaViewer.current_mouse_y;
-        if(igl::unproject_onto_mesh(Eigen::Vector2f(x,y), poncaViewer.core().view,
-            poncaViewer.core().proj, poncaViewer.core().viewport, cloudV, meshF, fid, bc)) {
-            const auto& tri = meshF.row(fid);
-            const auto& v0 = cloudV.row(tri[0]);
-            const auto& v1 = cloudV.row(tri[1]);
-            const auto& v2 = cloudV.row(tri[2]);
-            const Eigen::RowVector3d query_pt = bc[0] * v0 + bc[1] * v1 + bc[2] * v2;
+        const double x = poncaViewer.current_mouse_x;
+        const double y = poncaViewer.core().viewport(3) - poncaViewer.current_mouse_y;
 
-            selected_pid = *tree.nearest_neighbor(query_pt).begin();
+        if(! igl::unproject_onto_mesh(Eigen::Vector2f(x,y), poncaViewer.core().view,
+            poncaViewer.core().proj, poncaViewer.core().viewport, cloudV, meshF, fid, bc))
+            return false;
 
-            // Paint the selected point red
-            cloudC.row(selected_pid) = red;
-            poncaViewer.data().clear_points();
-            poncaViewer.data().add_points(cloudV, cloudC);
-            return true;
-        }
-        return false;
+        const auto& tri = meshF.row(fid);
+        const auto& v0 = cloudV.row(tri[0]);
+        const auto& v1 = cloudV.row(tri[1]);
+        const auto& v2 = cloudV.row(tri[2]);
+        const Eigen::RowVector3d query_pt = bc[0] * v0 + bc[1] * v1 + bc[2] * v2;
+
+        selected_pid = *tree.nearest_neighbor(query_pt).begin();
+
+        // Paint the selected point red
+        cloudC.row(selected_pid) = red;
+        poncaViewer.data().clear_points();
+        poncaViewer.data().add_points(cloudV, cloudC);
+        return true;
     }
 };
 
@@ -290,6 +289,9 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    poncaViewer.core().background_color[0] = 0.12;
+    poncaViewer.core().background_color[1] = 0.12;
+    poncaViewer.core().background_color[2] = 0.12;
     poncaViewer.data().show_faces   = false; // Hide de face by default
     static bool showMinCurvatureDir = false; // Hide the curvatures direction by default
     static bool showMaxCurvatureDir = false;
