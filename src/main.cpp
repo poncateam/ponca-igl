@@ -181,7 +181,7 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
 
 class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 {
-    IGL_INLINE virtual bool post_load() override
+    IGL_INLINE bool post_load() override
     {
         // Clear the previous mesh when a new mesh is added, as well as the overlays
         if(poncaViewer.data_list.size() > 1)
@@ -208,7 +208,7 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 
         return false;
     }
-    IGL_INLINE virtual bool mouse_down(int button, int /*modifier*/) override
+    IGL_INLINE bool mouse_down(int button, int /*modifier*/) override
     {
         int fid;
         cloudC = blue.replicate(cloudV.rows(), 1);
