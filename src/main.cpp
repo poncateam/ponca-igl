@@ -19,7 +19,7 @@ This Source Code Form is subject to the terms of the Mozilla Public
 #include <Ponca/SpatialPartitioning>
 #include "poncaAdapters.hpp"
 
-#include "igl/unproject_onto_mesh.h"
+#include "igl/unproject_ray.h"
 
 using Scalar             = double;
 using VectorType         = Eigen::Vector<Scalar, 3>;
@@ -211,6 +211,10 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
     }
     IGL_INLINE bool mouse_down(int button, int /*modifier*/) override
     {
+        // Select only if middle click
+        if (button != 1)
+            return false;
+
         int fid;
         cloudC = blue.replicate(cloudV.rows(), 1);
         Eigen::Vector3f bc;
@@ -218,17 +222,37 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
         const double x = poncaViewer.current_mouse_x;
         const double y = poncaViewer.core().viewport(3) - poncaViewer.current_mouse_y;
 
-        if(! igl::unproject_onto_mesh(Eigen::Vector2f(x,y), poncaViewer.core().view,
-            poncaViewer.core().proj, poncaViewer.core().viewport, cloudV, meshF, fid, bc))
+        // Creates the ray in the world space
+        Eigen::Vector3f origin,dir;
+        igl::unproject_ray(
+            Eigen::Vector2f(x,y), poncaViewer.core().view,
+            poncaViewer.core().proj, poncaViewer.core().viewport,
+            origin,dir
+        );
+        dir.normalize();
+
+        float minDist = std::numeric_limits<float>::max();
+
+        // Searching for the closest point to the ray
+        for (int i = 0; i < cloudV.rows(); ++i) {
+            Eigen::Vector3f vertex = cloudV.row(i).cast<float>();
+            Eigen::Vector3f v = vertex - origin;
+            float dotProd = v.dot(dir);
+
+            if (dotProd < 0) continue; // The vertex is behind the ray camera
+
+            Eigen::Vector3f closestPointOnRay = origin + dotProd * dir;
+            float distanceToRay = (vertex - closestPointOnRay).norm();
+
+            if (distanceToRay < minDist) {
+                selected_pid = i;
+                minDist = distanceToRay;
+            }
+        }
+
+        // No vertex found in front of the camera
+        if (minDist == std::numeric_limits<float>::max())
             return false;
-
-        const auto& tri = meshF.row(fid);
-        const auto& v0 = cloudV.row(tri[0]);
-        const auto& v1 = cloudV.row(tri[1]);
-        const auto& v2 = cloudV.row(tri[2]);
-        const Eigen::RowVector3d query_pt = bc[0] * v0 + bc[1] * v1 + bc[2] * v2;
-
-        selected_pid = *tree.nearest_neighbor(query_pt).begin();
 
         // Paint the selected point red
         cloudC.row(selected_pid) = red;
