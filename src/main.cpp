@@ -96,6 +96,7 @@ void processPointCloud(const typename FitT::WeightFunction& w, Functor f){
     }
 }
 
+/// Recolorize the point cloud on the viewer given a set of scalar values (associated to each point) and a colormap. Can also write the values next to the point cloud (extra label)
 template<igl::ColorMapType cm>
 void colorMapPointCloudScalars(Eigen::VectorXd scalars, const bool writeLabel=true) {
     poncaViewer.data().clear_points();
