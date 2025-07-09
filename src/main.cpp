@@ -96,6 +96,7 @@ void processPointCloud(const typename FitT::WeightFunction& w, Functor f){
     }
 }
 
+/// Recolorize the point cloud on the viewer given a set of scalar values (associated to each point) and a colormap. Can also write the values next to the point cloud (extra label)
 template<igl::ColorMapType cm>
 void colorMapPointCloudScalars(Eigen::VectorXd scalars, const bool writeLabel=true) {
     poncaViewer.data().clear_points();
@@ -181,7 +182,7 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
 
 class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 {
-    IGL_INLINE virtual bool post_load() override
+    IGL_INLINE bool post_load() override
     {
         // Clear the previous mesh when a new mesh is added, as well as the overlays
         if(poncaViewer.data_list.size() > 1)
@@ -208,8 +209,7 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 
         return false;
     }
-
-    IGL_INLINE virtual bool mouse_down(int button, int /*modifier*/) override
+    IGL_INLINE bool mouse_down(int button, int /*modifier*/) override
     {
         // Select only if middle click
         if (button != 1)
