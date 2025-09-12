@@ -69,15 +69,15 @@ void processRangeNeighbors(int i, Functor f){
 /// Generic processing function: traverse point cloud, compute fitting, and use functor to process fitting output
 /// \note Functor is called only if fit is stable
 template<typename FitT, typename Functor>
-void processPointCloud(const typename FitT::WeightFunction& w, Functor f){
+void processPointCloud(const typename FitT::Scalar t, Functor f){
 #pragma omp parallel for
     for (int i = 0; i < tree.samples().size(); ++i) {
         VectorType pos = tree.points()[i].pos();
 
         for( int mm = 0; mm < mlsIter; ++mm) {
             FitT fit;
-            fit.setWeightFunc(w);
-            fit.init( pos );
+            fit.setWeightFunc({pos, t});
+            fit.init();
 
             processRangeNeighbors(i, [&fit](int j){
                 fit.addNeighbor(tree.points()[j]);
@@ -141,7 +141,7 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
 
     measureTime( "Compute differential quantities",
                  [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]() {
-        processPointCloud<FitT>(SmoothWeightFunc(NSize),
+        processPointCloud<FitT>(NSize,
                                 [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]
                                 ( const int i, const FitT& fit, const VectorType& mlsPos){
 
