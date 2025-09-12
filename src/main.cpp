@@ -37,8 +37,8 @@ igl::opengl::glfw::Viewer poncaViewer;
 
 // Building the kdtree
 KdTree tree;
-constexpr float NSize        = 0.1;   /// Neighborhood size used to build the kdtree (euclidean)
-constexpr int mlsIter        = 3;     /// Number of moving least squares iterations
+constexpr float NSize = 0.1;   /// Neighborhood size used to build the kdtree (euclidean)
+int mlsIter           = 3;     /// Number of moving least squares iterations
 
 // Kd Tree search
 int k = 10;                 /// Number of neighbors to search for
@@ -358,6 +358,7 @@ int main(int argc, char *argv[])
         }
         // Add new group
         if (ImGui::CollapsingHeader("Curvature estimation", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::InputInt("Number of MLS iteration", &mlsIter);
             ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "NONE\0ASO\0APSS\0PSS\0\0");
             ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "MEAN\0MIN\0MAX\0\0");
             ImGui::Checkbox("Show min curvature direction", &showMinCurvatureDir);
