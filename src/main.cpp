@@ -39,6 +39,7 @@ igl::opengl::glfw::Viewer poncaViewer;
 KdTree tree;
 constexpr float NSize = 0.1;   /// Neighborhood size used to build the kdtree (euclidean)
 int mlsIter           = 3;     /// Number of moving least squares iterations
+float pointSize       = 10;
 
 // Kd Tree search
 int k = 10;                 /// Number of neighbors to search for
@@ -204,7 +205,7 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
         poncaViewer.data().add_points(cloudV, cloudC);
 
         // Overlay settings
-        poncaViewer.data().point_size *= 0.3;
+        poncaViewer.data().point_size = pointSize;
         poncaViewer.data().show_lines = false;
 
         return false;
@@ -324,6 +325,13 @@ int main(int argc, char *argv[])
     // Curvature estimation parameters
     static FittingType fitType = FittingType::ASO;
     static DisplayedScalar displayedScalar = DisplayedScalar::MEAN;
+    menu.callback_draw_viewer_menu = [&]()
+    {
+        // Draw parent menu content
+        menu.draw_viewer_menu();
+        if (ImGui::DragFloat("Point size", &pointSize))
+            poncaViewer.data().point_size = pointSize;
+    };
 
     // Draw additional windows
     menu.callback_draw_custom_window = [&]() {
