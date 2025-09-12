@@ -322,7 +322,7 @@ int main(int argc, char *argv[])
     static bool showMaxCurvatureDir = false;
 
     // Curvature estimation parameters
-    static FittingType fitType = FittingType::NONE;
+    static FittingType fitType = FittingType::ASO;
     static DisplayedScalar displayedScalar = DisplayedScalar::MEAN;
 
     // Draw additional windows
