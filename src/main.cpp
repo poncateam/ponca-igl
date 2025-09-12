@@ -31,9 +31,14 @@ using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightK
 enum FittingType { FT_NONE=0, ASO, APSS, PSS };
 enum DisplayedScalar { DS_NONE=0, MEAN, MIN, MAX };
 
-Eigen::MatrixXd cloudV, cloudN, cloudC; // Points position, normals and colors
+Eigen::MatrixXd cloudV, cloudN, cloudC, cloudP; // Points position, normals, colors and project values
 Eigen::MatrixXi meshF; // The face of the mesh
 igl::opengl::glfw::Viewer poncaViewer;
+
+bool displayProjPos = false;
+Eigen::MatrixXd getPointCloudPosition() {
+    return displayProjPos ? cloudP : cloudV;
+}
 
 // Building the kdtree
 KdTree tree;
@@ -86,8 +91,11 @@ void processPointCloud(const typename FitT::Scalar t, Functor f){
 
             if (fit.finalize() == Ponca::STABLE){
                 pos = fit.project( pos );
-                if ( mm == mlsIter -1 ) // last mls step, calling functor
+                if ( mm == mlsIter -1 ) {
+                    // last mls step, calling functor
                     f(i, fit, pos);
+                    cloudP.row(i) = pos.transpose();
+                }
             }
             else {
                 std::cerr << "Warning: fit " << i << " is not stable" << std::endl;
@@ -112,7 +120,7 @@ void colorMapPointCloudScalars(Eigen::VectorXd scalars, const bool writeLabel=tr
         igl::colormap(cm, normalized[i], rgb[0], rgb[1], rgb[2]);
         cloudC.row(i) = rgb;
     }
-    poncaViewer.data().add_points(cloudV, cloudC);
+    poncaViewer.data().add_points(getPointCloudPosition(), cloudC);
 
     if (!writeLabel) return;
 
@@ -123,7 +131,7 @@ void colorMapPointCloudScalars(Eigen::VectorXd scalars, const bool writeLabel=tr
         std::stringstream l1;
         l1 << scalars(i) ;
         const Eigen::Vector3d offset = cloudN.row(i).transpose() * 0.0007; // Offset from the normal
-        Eigen::Vector3d position     = cloudV.row(i).transpose();  // from row (1x3) to column (3x1)
+        Eigen::Vector3d position     = getPointCloudPosition().row(i).transpose();  // from row (1x3) to column (3x1)
         position += offset;  // apply offset
 
         poncaViewer.data().add_label(position, l1.str());
@@ -133,7 +141,7 @@ void colorMapPointCloudScalars(Eigen::VectorXd scalars, const bool writeLabel=tr
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
 template<typename FitT>
-void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool showMinCurvatureDir = true, const bool showMaxCurvatureDir = true) {
+void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool showMinCurvatureDir = true, const bool showMaxCurvatureDir = true, const bool displayProjPos = false) {
     int nvert = tree.samples().size();
 
     Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
@@ -161,10 +169,10 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
     // Show the first and second curvature direction
     const double avg = igl::avg_edge_length(cloudV, meshF);
     if (showMinCurvatureDir) {
-        poncaViewer.data().add_edges(cloudV, cloudV + dmin*avg, blue);
+        poncaViewer.data().add_edges(getPointCloudPosition(), cloudV + dmin*avg, blue);
     }
     if (showMaxCurvatureDir) {
-        poncaViewer.data().add_edges(cloudV, cloudV + dmax*avg, red);
+        poncaViewer.data().add_edges(getPointCloudPosition(), cloudV + dmax*avg, red);
     }
 
     // Display the scalar computed by the curvature estimator
@@ -172,7 +180,7 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
         case DS_NONE:
             poncaViewer.data().clear_points();
             cloudC = blue.replicate(cloudV.rows(), 1);
-            poncaViewer.data().add_points(cloudV, cloudC);
+            poncaViewer.data().add_points(getPointCloudPosition(), cloudC);
             break;
         case MEAN:
             colorMapPointCloudScalars<igl::ColorMapType::COLOR_MAP_TYPE_TURBO>(mean );
@@ -196,8 +204,9 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 
 
         // Retrieve mesh information
-        cloudV = poncaViewer.data().V;
-        meshF  = poncaViewer.data().F;
+        cloudV  = poncaViewer.data().V;
+        cloudP  = poncaViewer.data().V;
+        meshF   = poncaViewer.data().F;
         cloudN  = poncaViewer.data().V_normals;
 
         // Build Ponca KdTree
@@ -241,7 +250,7 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
 
         // Searching for the closest point to the ray
         for (int i = 0; i < cloudV.rows(); ++i) {
-            Eigen::Vector3f vertex = cloudV.row(i).cast<float>();
+            Eigen::Vector3f vertex = getPointCloudPosition().row(i).cast<float>();
             Eigen::Vector3f v = vertex - origin;
             float dotProd = v.dot(dir);
 
@@ -263,7 +272,7 @@ class PluginPoncaGUI final : public igl::opengl::glfw::ViewerPlugin
         // Paint the selected point red
         cloudC.row(selected_pid) = red;
         poncaViewer.data().clear_points();
-        poncaViewer.data().add_points(cloudV, cloudC);
+        poncaViewer.data().add_points(getPointCloudPosition(), cloudC);
         return true;
     }
 };
@@ -366,7 +375,7 @@ int main(int argc, char *argv[])
                     cloudC.row(neighbor_idx) = orange;
                 }
 
-                poncaViewer.data().add_points(cloudV, cloudC);
+                poncaViewer.data().add_points(getPointCloudPosition(), cloudC);
             }
         }
         // Add new group
@@ -376,13 +385,14 @@ int main(int argc, char *argv[])
             ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0MIN\0MAX\0\0");
             ImGui::Checkbox("Show min curvature direction", &showMinCurvatureDir);
             ImGui::Checkbox("Show max curvature direction", &showMaxCurvatureDir);
+            ImGui::Checkbox("Display the projected position", &displayProjPos);
 
             // Update the estimation preview
             if (ImGui::Button("Update curvatures estimation")) {
                 poncaViewer.data().clear_edges();
 
                 switch (fitType) {
-                    case FT_NONE:
+                    case FT_NONE: // TODO : remove the possibility of displaying the projected position
                         poncaViewer.data().clear_points();
                         cloudC = blue.replicate(cloudV.rows(), 1);
                         poncaViewer.data().add_points(cloudV, cloudC);
