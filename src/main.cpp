@@ -28,8 +28,8 @@ using KdTree             = Ponca::KdTreeSparse<PPAdapter>;
 using KnnGraph           = Ponca::KnnGraph<PPAdapter>;
 using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightKernel<Scalar> >;
 
-enum FittingType { NONE=0, ASO, APSS, PSS };
-enum DisplayedScalar { MEAN, MIN, MAX };
+enum FittingType { FT_NONE=0, ASO, APSS, PSS };
+enum DisplayedScalar { DS_NONE=0, MEAN, MIN, MAX };
 
 Eigen::MatrixXd cloudV, cloudN, cloudC; // Points position, normals and colors
 Eigen::MatrixXi meshF; // The face of the mesh
@@ -169,6 +169,11 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
 
     // Display the scalar computed by the curvature estimator
     switch (displayedScalar) {
+        case DS_NONE:
+            poncaViewer.data().clear_points();
+            cloudC = blue.replicate(cloudV.rows(), 1);
+            poncaViewer.data().add_points(cloudV, cloudC);
+            break;
         case MEAN:
             colorMapPointCloudScalars<igl::ColorMapType::COLOR_MAP_TYPE_TURBO>(mean );
             break;
@@ -368,7 +373,7 @@ int main(int argc, char *argv[])
         if (ImGui::CollapsingHeader("Curvature estimation", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::InputInt("Number of MLS iteration", &mlsIter);
             ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "NONE\0ASO\0APSS\0PSS\0\0");
-            ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "MEAN\0MIN\0MAX\0\0");
+            ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0MIN\0MAX\0\0");
             ImGui::Checkbox("Show min curvature direction", &showMinCurvatureDir);
             ImGui::Checkbox("Show max curvature direction", &showMaxCurvatureDir);
 
@@ -377,7 +382,7 @@ int main(int argc, char *argv[])
                 poncaViewer.data().clear_edges();
 
                 switch (fitType) {
-                    case NONE:
+                    case FT_NONE:
                         poncaViewer.data().clear_points();
                         cloudC = blue.replicate(cloudV.rows(), 1);
                         poncaViewer.data().add_points(cloudV, cloudC);
