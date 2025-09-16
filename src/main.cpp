@@ -42,7 +42,7 @@ Eigen::MatrixXd getPointCloudPosition() {
 
 // Building the kdtree
 KdTree tree;
-constexpr float NSize = 0.1;   /// Neighborhood size used to build the kdtree (euclidean)
+float NSize           = 0.1;   /// Neighborhood size used in the curvature estimation (and to build the kdtree)
 int mlsIter           = 3;     /// Number of moving least squares iterations
 float pointSize       = 10;
 
@@ -75,14 +75,14 @@ void processRangeNeighbors(int i, Functor f){
 /// Generic processing function: traverse point cloud, compute fitting, and use functor to process fitting output
 /// \note Functor is called only if fit is stable
 template<typename FitT, typename Functor>
-void processPointCloud(const typename FitT::Scalar t, Functor f){
+void processPointCloud(Functor f){
 #pragma omp parallel for
     for (int i = 0; i < tree.samples().size(); ++i) {
         VectorType pos = tree.points()[i].pos();
 
         for( int mm = 0; mm < mlsIter; ++mm) {
             FitT fit;
-            fit.setWeightFunc({pos, t});
+            fit.setWeightFunc({pos, NSize});
             fit.init();
 
             processRangeNeighbors(i, [&fit](int j){
@@ -150,8 +150,7 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
 
     measureTime( "Compute differential quantities",
                  [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]() {
-        processPointCloud<FitT>(NSize,
-                                [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]
+        processPointCloud<FitT>([&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]
                                 ( const int i, const FitT& fit, const VectorType& mlsPos){
 
             mean(i) = fit.kMean();
@@ -380,6 +379,8 @@ int main(int argc, char *argv[])
         }
         // Add new group
         if (ImGui::CollapsingHeader("Curvature estimation", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::DragFloat("Fitting radius", &NSize, 0.001f, 0.001f))
+                NSize = std::max(NSize, 0.001f);
             ImGui::InputInt("Number of MLS iteration", &mlsIter);
             ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "NONE\0ASO\0APSS\0PSS\0\0");
             ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0MIN\0MAX\0\0");
