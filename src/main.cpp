@@ -168,10 +168,10 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
     // Show the first and second curvature direction
     const double avg = igl::avg_edge_length(cloudV, meshF);
     if (showMinCurvatureDir) {
-        poncaViewer.data().add_edges(getPointCloudPosition(), cloudV + dmin*avg, blue);
+        poncaViewer.data().add_edges(getPointCloudPosition(), getPointCloudPosition() + dmin*avg, blue);
     }
     if (showMaxCurvatureDir) {
-        poncaViewer.data().add_edges(getPointCloudPosition(), cloudV + dmax*avg, red);
+        poncaViewer.data().add_edges(getPointCloudPosition(), getPointCloudPosition() + dmax*avg, red);
     }
 
     // Display the scalar computed by the curvature estimator
