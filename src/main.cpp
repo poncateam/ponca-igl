@@ -51,7 +51,7 @@ int k = 10;                 /// Number of neighbors to search for
 int selected_pid = 0;       /// The currently selected point from the point cloud
 
 // Some default colors
-const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8), green(0.2,0.8,0.2);
+const Eigen::RowVector3d red(0.8,0.2,0.2), orange(0.8,0.5,0.2), blue(0.2,0.2,0.8), green(0.2,0.8,0.2), cyan(0.2,0.8,0.8);
 
 /// Convenience function measuring and printing the processing time of F
 template <typename Functor>
@@ -141,7 +141,7 @@ void colorMapPointCloudScalars(Eigen::VectorXd scalars, const bool writeLabel=tr
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
 template<typename FitT>
-void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool showMinCurvatureDir = true, const bool showMaxCurvatureDir = true, const bool displayProjPos = false) {
+void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool showMinCurvatureDir = true, const bool showMaxCurvatureDir = true, const bool showNormal = false) {
     int nvert = tree.samples().size();
 
     Eigen::MatrixXd dmin( nvert, 3 ), dmax( nvert, 3 );
@@ -172,6 +172,9 @@ void estimateDifferentialQuantities( DisplayedScalar displayedScalar, const bool
     }
     if (showMaxCurvatureDir) {
         poncaViewer.data().add_edges(getPointCloudPosition(), getPointCloudPosition() + dmax*avg, red);
+    }
+    if (showNormal) {
+        poncaViewer.data().add_edges(getPointCloudPosition(), getPointCloudPosition()+normal*avg, cyan);
     }
 
     // Display the scalar computed by the curvature estimator
@@ -334,6 +337,7 @@ int main(int argc, char *argv[])
     poncaViewer.data().show_faces   = false; // Hide de face by default
     static bool showMinCurvatureDir = false; // Hide the curvatures direction by default
     static bool showMaxCurvatureDir = false;
+    static bool showFitGradientDir  = false;
 
     // Curvature estimation parameters
     static FittingType fitType = FittingType::ASO;
@@ -384,8 +388,9 @@ int main(int argc, char *argv[])
             ImGui::InputInt("Number of MLS iteration", &mlsIter);
             ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "ASO\0APSS\0PSS\0\0");
             ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0MIN\0MAX\0\0");
-            ImGui::Checkbox("Show min curvature direction", &showMinCurvatureDir);
-            ImGui::Checkbox("Show max curvature direction", &showMaxCurvatureDir);
+            ImGui::Checkbox("Show min curvature direction"  , &showMinCurvatureDir);
+            ImGui::Checkbox("Show max curvature direction"  , &showMaxCurvatureDir);
+            ImGui::Checkbox("Show fit gradient direction"   , &showFitGradientDir);
             ImGui::Checkbox("Display the projected position", &displayProjPos);
 
             // Update the estimation preview
@@ -395,15 +400,15 @@ int main(int argc, char *argv[])
                 switch (fitType) {
                     case ASO:
                         std::cout << "[Ponca] ASO : ";
-                        estimateDifferentialQuantities<FitASODiff>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir);
+                        estimateDifferentialQuantities<FitASODiff>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case APSS:
                         std::cout << "[Ponca] APSS : ";
-                        estimateDifferentialQuantities<FitAPSSDiff>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir);
+                        estimateDifferentialQuantities<FitAPSSDiff>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case PSS:
                         std::cout << "[Ponca] PSS : ";
-                        estimateDifferentialQuantities<FitPlaneDiff>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir);
+                        estimateDifferentialQuantities<FitPlaneDiff>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                 }
             }
