@@ -311,6 +311,35 @@ int main(int argc, char *argv[])
             Ponca::DiffType::FitSpaceDer,
             Ponca::OrientedSphereDer, Ponca::MlsSphereFitDer,
             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+    //////////////////////////////////////////////////////////
+    // using FitPlaneMeanDiff = Ponca::BasketDiff<
+    //         FitPlane,
+    //         Ponca::DiffType::FitSpaceDer,
+    //         Ponca::CovariancePlaneDer,
+    //         Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+
+    // using FitSphere = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>;
+    // using FitSphereDiff = Ponca::BasketDiff<
+    //         FitSphere,
+    //         Ponca::DiffType::FitSpaceDer,
+    //         Ponca::MlsSphereFitDer,
+    //         Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+
+    //////////////////////////////////////////////////////////
+
+    // using fit_Sphere = Ponca::BasketDiff<
+    //             Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>,
+    //             Ponca::DiffType::FitSpaceDer,
+    //             Ponca::SphereFitDer,
+    //             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+
+    // using fit_Sphere = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SimpleSphereFit>;
+
+    // using FitSphereDiff = Ponca::BasketDiff<
+    //             Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>,
+    //             Ponca::DiffType::FitSpaceDer,
+    //             Ponca::UnorientedSphereDer,
+    //             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
 
     using FitUnorientedSphere = Ponca::BasketDiff<
                 Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::UnorientedSphereFit>,
