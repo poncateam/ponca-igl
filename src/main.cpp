@@ -28,7 +28,7 @@ using KdTree             = Ponca::KdTreeSparse<PPAdapter>;
 using KnnGraph           = Ponca::KnnGraph<PPAdapter>;
 using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightKernel<Scalar> >;
 
-enum FittingType { ASO, APSS, PSS };
+enum FittingType { ASO, APSS, PSS, UnorientedSphere };
 enum DisplayedScalar { NONE=0, MEAN, MIN, MAX };
 
 Eigen::MatrixXd cloudV, cloudN, cloudC, cloudP; // Points position, normals, colors and project values
@@ -311,6 +311,13 @@ int main(int argc, char *argv[])
             Ponca::DiffType::FitSpaceDer,
             Ponca::OrientedSphereDer, Ponca::MlsSphereFitDer,
             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+
+    using FitUnorientedSphere = Ponca::BasketDiff<
+                Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::UnorientedSphereFit>,
+                Ponca::DiffType::FitSpaceDer,
+                Ponca::UnorientedSphereDer,
+                Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
+
     //////////////////////////////////////////////////////////
 
     // Load the default mesh
@@ -386,7 +393,7 @@ int main(int argc, char *argv[])
             if (ImGui::DragFloat("Fitting radius", &NSize, 0.001f, 0.001f))
                 NSize = std::max(NSize, 0.001f);
             ImGui::InputInt("Number of MLS iteration", &mlsIter);
-            ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "ASO\0APSS\0PSS\0\0");
+            ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "ASO\0APSS\0PSS\0UnorientedSphere\0\0");
             ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0MIN\0MAX\0\0");
             ImGui::Checkbox("Show min curvature direction"  , &showMinCurvatureDir);
             ImGui::Checkbox("Show max curvature direction"  , &showMaxCurvatureDir);
@@ -409,6 +416,10 @@ int main(int argc, char *argv[])
                     case PSS:
                         std::cout << "[Ponca] PSS : ";
                         estimateDifferentialQuantities<FitPlaneDiff>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
+                        break;
+                    case UnorientedSphere:
+                        std::cout << "[Ponca] UnorientedSphere : ";
+                        estimateDifferentialQuantities<FitUnorientedSphere>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir);
                         break;
                 }
             }
