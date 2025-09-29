@@ -152,13 +152,13 @@ void estimateCurvature( DisplayedScalar displayedScalar, const bool showMinCurva
                  [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]() {
         processPointCloud<FitT>([&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]
                                 ( const int i, const FitT& fit, const VectorType& mlsPos){
+            normal.row( i ) = fit.primitiveGradient();
             if constexpr (providesMean) {
                 mean(i) = fit.kMean();
             }
             if constexpr (provideCurvDiff) {
                 kmax(i) = fit.kmax();
                 kmin(i) = fit.kmin();
-                normal.row( i ) = fit.primitiveGradient();
                 dmin.row( i )   = fit.kminDirection();
                 dmax.row( i )   = fit.kmaxDirection();
             }
@@ -351,12 +351,12 @@ int main(int argc, char *argv[])
     poncaViewer.core().background_color[0] = 0.12;
     poncaViewer.core().background_color[1] = 0.12;
     poncaViewer.core().background_color[2] = 0.12;
-    poncaViewer.data().show_faces   = false; // Hide de face by default
-    static bool showMinCurvatureDir = false; // Hide the curvatures direction by default
-    static bool showMaxCurvatureDir = false;
-    static bool showFitGradientDir  = false;
-    static bool providesCurvatureDiff = false; // Preview the direction of the min and max curvature
-    static bool providesCurvatureMean = false; // Preview the mean curvature
+    poncaViewer.data().show_faces     = false; // Hide de face by default
+    static bool showMinCurvatureDir   = false; // Hide the curvatures direction by default
+    static bool showMaxCurvatureDir   = false;
+    static bool showFitGradientDir    = false;
+    static bool providesCurvatureDiff = true; // Preview the direction of the min and max curvature
+    static bool providesCurvatureMean = true; // Preview the mean curvature
 
     // Curvature estimation parameters
     static FittingType fitType = FittingType::ASO;
@@ -413,9 +413,11 @@ int main(int argc, char *argv[])
                         providesCurvatureDiff = false;
                         break;
                     case UnorientedSphere:
+                        providesCurvatureMean = true;
                         providesCurvatureDiff = false;
                         break;
                     case ASO: case APSS: case PSS:
+                        providesCurvatureMean = true;
                         providesCurvatureDiff = true;
                         break;
                 }
@@ -425,8 +427,12 @@ int main(int argc, char *argv[])
                 ImGui::Checkbox("Show min curvature direction", &showMinCurvatureDir);
                 ImGui::Checkbox("Show max curvature direction", &showMaxCurvatureDir);
             } else { // Restrict the options
-                displayedScalar = std::min(displayedScalar, MEAN);
-                ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0\0");
+                if (providesCurvatureMean) {
+                    displayedScalar = std::min(displayedScalar, MEAN);
+                    ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0\0");
+                } else {
+                    displayedScalar = NONE;
+                }
             }
             ImGui::Checkbox("Show fit gradient direction"   , &showFitGradientDir);
             ImGui::Checkbox("Display the projected position", &displayProjPos);
@@ -454,7 +460,7 @@ int main(int argc, char *argv[])
                         break;
                     case PlaneMean:
                         std::cout << "[Ponca] PlaneMean : ";
-                        estimateCurvature<FitPlaneMean, false, false>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir);
+                        estimateCurvature<FitPlaneMean, false, false>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                 }
             }
