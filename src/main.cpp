@@ -408,7 +408,7 @@ int main(int argc, char *argv[])
 
             if (ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "ASO\0APSS\0PSS\0UnorientedSphere\0PlaneMean\0\0")) {
                 switch (fitType) {
-                    case NONE: case PlaneMean:
+                    case PlaneMean:
                         providesCurvatureMean = false;
                         providesCurvatureDiff = false;
                         break;
@@ -419,10 +419,9 @@ int main(int argc, char *argv[])
                         providesCurvatureDiff = true;
                         break;
                 }
-            };
+            }
             if (providesCurvatureDiff) {
                 ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0MIN\0MAX\0\0");
-            }
                 ImGui::Checkbox("Show min curvature direction", &showMinCurvatureDir);
                 ImGui::Checkbox("Show max curvature direction", &showMaxCurvatureDir);
             } else { // Restrict the options
