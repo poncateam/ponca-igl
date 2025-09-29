@@ -28,7 +28,7 @@ using KdTree             = Ponca::KdTreeSparse<PPAdapter>;
 using KnnGraph           = Ponca::KnnGraph<PPAdapter>;
 using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightKernel<Scalar> >;
 
-enum FittingType { ASO, APSS, PSS, UnorientedSphere };
+enum FittingType { ASO, APSS, PSS, UnorientedSphere, PlaneMean };
 enum DisplayedScalar { NONE=0, MEAN, MIN, MAX };
 
 Eigen::MatrixXd cloudV, cloudN, cloudC, cloudP; // Points position, normals, colors and project values
@@ -140,7 +140,7 @@ void colorMapPointCloudScalars(Eigen::VectorXd scalars, const bool writeLabel=tr
 
 /// Generic processing function: traverse point cloud and compute mean, first and second curvatures + their direction
 /// \tparam FitT Defines the type of estimator used for computation
-template<typename FitT, bool doDiff=false>
+template<typename FitT, bool provideCurvDiff=false, bool providesMean=false>
 void estimateCurvature( DisplayedScalar displayedScalar, const bool showMinCurvatureDir = true, const bool showMaxCurvatureDir = true, const bool showNormal = false) {
     int nvert = tree.samples().size();
 
@@ -152,9 +152,10 @@ void estimateCurvature( DisplayedScalar displayedScalar, const bool showMinCurva
                  [&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]() {
         processPointCloud<FitT>([&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]
                                 ( const int i, const FitT& fit, const VectorType& mlsPos){
-
-            mean(i) = fit.kMean();
-            if constexpr (doDiff) {
+            if constexpr (providesMean) {
+                mean(i) = fit.kMean();
+            }
+            if constexpr (provideCurvDiff) {
                 kmax(i) = fit.kmax();
                 kmin(i) = fit.kmin();
                 normal.row( i ) = fit.primitiveGradient();
@@ -169,7 +170,7 @@ void estimateCurvature( DisplayedScalar displayedScalar, const bool showMinCurva
 
     // Show the first and second curvature direction
     const double avg = igl::avg_edge_length(cloudV, meshF);
-    if constexpr (doDiff) {
+    if constexpr (provideCurvDiff) {
         // Show the first and second curvature direction
         if (showMinCurvatureDir) {
             poncaViewer.data().add_edges(getPointCloudPosition(), getPointCloudPosition() + dmin*avg, blue);
@@ -180,6 +181,7 @@ void estimateCurvature( DisplayedScalar displayedScalar, const bool showMinCurva
     }
     if (showNormal) {
         poncaViewer.data().add_edges(getPointCloudPosition(), getPointCloudPosition()+normal*avg, cyan);
+    }
 
     // Display the scalar computed by the curvature estimator
     switch (displayedScalar) {
@@ -309,45 +311,18 @@ int main(int argc, char *argv[])
             Ponca::OrientedSphereDer,
             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
 
-    using FitASO = FitAPSS;
     using FitASODiff = Ponca::BasketDiff<
-            FitASO,
+            FitAPSS,
             Ponca::DiffType::FitSpaceDer,
             Ponca::OrientedSphereDer, Ponca::MlsSphereFitDer,
             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
-    //////////////////////////////////////////////////////////
-    using FitPlaneMeanDiff = Ponca::BasketDiff<
-            FitPlane,
-            Ponca::DiffType::FitSpaceDer,
-            Ponca::CovariancePlaneDer,
-            Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
-
-    typedef Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit, Ponca::MongePatch> FitCov;
-
-    // using FitSphere = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>;
-    // using FitSphereDiff = Ponca::BasketDiff<
-    //         FitSphere,
-    //         Ponca::DiffType::FitSpaceDer,
-    //         Ponca::MlsSphereFitDer,
-    //         Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
 
     //////////////////////////////////////////////////////////
+    // using SphereFit = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>;
+    // using FitPlaneCov = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit, Ponca::MongePatch>; // Covariance + MongePatch
+    using FitPlaneMean = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::MeanPlaneFit>;
 
-    // using fit_Sphere = Ponca::BasketDiff<
-    //             Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>,
-    //             Ponca::DiffType::FitSpaceDer,
-    //             Ponca::SphereFitDer,
-    //             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
-
-    // using fit_Sphere = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SimpleSphereFit>;
-
-    // using FitSphereDiff = Ponca::BasketDiff<
-    //             Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>,
-    //             Ponca::DiffType::FitSpaceDer,
-    //             Ponca::UnorientedSphereDer,
-    //             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
-
-    using FitUnorientedSphere = Ponca::BasketDiff<
+    using FitUnorientedSphereDiff = Ponca::BasketDiff<
                 Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::UnorientedSphereFit>,
                 Ponca::DiffType::FitSpaceDer,
                 Ponca::UnorientedSphereDer,
@@ -380,7 +355,8 @@ int main(int argc, char *argv[])
     static bool showMinCurvatureDir = false; // Hide the curvatures direction by default
     static bool showMaxCurvatureDir = false;
     static bool showFitGradientDir  = false;
-    static bool differential        = false; // Add the direction of the min and max curvature
+    static bool providesCurvatureDiff = false; // Preview the direction of the min and max curvature
+    static bool providesCurvatureMean = false; // Preview the mean curvature
 
     // Curvature estimation parameters
     static FittingType fitType = FittingType::ASO;
@@ -430,18 +406,23 @@ int main(int argc, char *argv[])
                 NSize = std::max(NSize, 0.001f);
             ImGui::InputInt("Number of MLS iteration", &mlsIter);
 
-            if (ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "ASO\0APSS\0PSS\0UnorientedSphere\0\0")) {
+            if (ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "ASO\0APSS\0PSS\0UnorientedSphere\0PlaneMean\0\0")) {
                 switch (fitType) {
-                case NONE: case UnorientedSphere:
-                    differential = false;
-                    break;
-                case ASO: case APSS: case PSS:
-                    differential = true;
-                    break;
+                    case NONE: case PlaneMean:
+                        providesCurvatureMean = false;
+                        providesCurvatureDiff = false;
+                        break;
+                    case UnorientedSphere:
+                        providesCurvatureDiff = false;
+                        break;
+                    case ASO: case APSS: case PSS:
+                        providesCurvatureDiff = true;
+                        break;
                 }
-            }
-            if (differential) {
+            };
+            if (providesCurvatureDiff) {
                 ImGui::Combo("Scalar to display", reinterpret_cast<int*>(&displayedScalar), "NONE\0MEAN\0MIN\0MAX\0\0");
+            }
                 ImGui::Checkbox("Show min curvature direction", &showMinCurvatureDir);
                 ImGui::Checkbox("Show max curvature direction", &showMaxCurvatureDir);
             } else { // Restrict the options
@@ -451,7 +432,6 @@ int main(int argc, char *argv[])
             ImGui::Checkbox("Show fit gradient direction"   , &showFitGradientDir);
             ImGui::Checkbox("Display the projected position", &displayProjPos);
 
-
             // Update the estimation preview
             if (ImGui::Button("Update curvatures estimation")) {
                 poncaViewer.data().clear_edges();
@@ -459,19 +439,23 @@ int main(int argc, char *argv[])
                 switch (fitType) {
                     case ASO:
                         std::cout << "[Ponca] ASO : ";
-                        estimateCurvature<FitASODiff, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
+                        estimateCurvature<FitASODiff, true, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case APSS:
                         std::cout << "[Ponca] APSS : ";
-                        estimateCurvature<FitAPSSDiff, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
+                        estimateCurvature<FitAPSSDiff, true, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case PSS:
                         std::cout << "[Ponca] PSS : ";
-                        estimateCurvature<FitPlaneDiff, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
+                        estimateCurvature<FitPlaneDiff, true, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case UnorientedSphere:
                         std::cout << "[Ponca] UnorientedSphere : ";
-                        estimateCurvature<FitUnorientedSphere, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
+                        estimateCurvature<FitUnorientedSphereDiff, true, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
+                        break;
+                    case PlaneMean:
+                        std::cout << "[Ponca] PlaneMean : ";
+                        estimateCurvature<FitPlaneMean, false, false>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir);
                         break;
                 }
             }
