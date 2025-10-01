@@ -153,6 +153,8 @@ void estimateCurvature( DisplayedScalar displayedScalar, const bool showMinCurva
         processPointCloud<FitT>([&mean, &kmin, &kmax, &normal, &dmin, &dmax, &proj]
                                 ( const int i, const FitT& fit, const VectorType& mlsPos){
             normal.row( i ) = fit.primitiveGradient();
+            proj.row( i )   = mlsPos - tree.points()[i].pos();
+
             if constexpr (providesMean) {
                 mean(i) = fit.kMean();
             }
@@ -162,9 +164,6 @@ void estimateCurvature( DisplayedScalar displayedScalar, const bool showMinCurva
                 dmin.row( i )   = fit.kminDirection();
                 dmax.row( i )   = fit.kmaxDirection();
             }
-
-
-            proj.row( i )   = mlsPos - tree.points()[i].pos();
         });
     });
 
@@ -318,8 +317,8 @@ int main(int argc, char *argv[])
             Ponca::CurvatureEstimatorBase, Ponca::NormalDerivativesCurvatureEstimator>;
 
     //////////////////////////////////////////////////////////
-    // using SphereFit = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>;
-    // using FitPlaneCov = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit, Ponca::MongePatch>; // Covariance + MongePatch
+    using SphereFit = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::SphereFit>;
+    using FitPlaneCovMongePatch = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::CovariancePlaneFit, Ponca::MongePatch>; // Covariance + MongePatch
     using FitPlaneMean = Ponca::Basket<PPAdapter, SmoothWeightFunc, Ponca::MeanPlaneFit>;
 
     using FitUnorientedSphereDiff = Ponca::BasketDiff<
