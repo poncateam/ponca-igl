@@ -418,6 +418,9 @@ int main(int argc, char *argv[])
                         providesCurvatureMean = true;
                         providesCurvatureDiff = true;
                         break;
+                    default:
+                        std::cerr << "Error : unhandled fit type";
+                        break;
                 }
             }
             if (providesCurvatureDiff) {
@@ -467,6 +470,9 @@ int main(int argc, char *argv[])
                     case Sphere:
                         std::cout << "[Ponca] Sphere : ";
                         estimateCurvature<FitSphere, false, false>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
+                        break;
+                    default:
+                        std::cerr << "Error : unhandled fit type";
                         break;
                 }
             }
