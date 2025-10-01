@@ -29,6 +29,7 @@ using KnnGraph           = Ponca::KnnGraph<PPAdapter>;
 using SmoothWeightFunc   = Ponca::DistWeightFunc<PPAdapter, Ponca::SmoothWeightKernel<Scalar> >;
 
 enum FittingType { ASO, APSS, PSS, UnorientedSphere, PlaneMean, Sphere, PlaneCovMongePatch };
+static const char* fittingTypeNames[] = { "ASO", "APSS", "PSS", "UnorientedSphere", "PlaneMean", "Sphere", "PlaneCovMongePatch"};
 enum DisplayedScalar { NONE=0, MEAN, MIN, MAX };
 
 Eigen::MatrixXd cloudV, cloudN, cloudC, cloudP; // Points position, normals, colors and project values
@@ -404,7 +405,7 @@ int main(int argc, char *argv[])
             if (ImGui::DragFloat("Fitting radius", &NSize, 0.001f, 0.001f))
                 NSize = std::max(NSize, 0.001f);
             ImGui::InputInt("Number of MLS iteration", &mlsIter);
-            if (ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), "ASO\0APSS\0PSS\0UnorientedSphere\0PlaneMean\0Sphere\0PlaneCovMongePatch\0\0")) {
+            if (ImGui::Combo("Fit type", reinterpret_cast<int*>(&fitType), fittingTypeNames, IM_ARRAYSIZE(fittingTypeNames))) {
                 switch (fitType) {
                     case PlaneMean: case Sphere:
                         providesCurvatureMean = false;
@@ -442,33 +443,27 @@ int main(int argc, char *argv[])
             if (ImGui::Button("Update curvatures estimation")) {
                 poncaViewer.data().clear_edges();
 
+                std::cout << "[Ponca] " << fittingTypeNames[fitType] << " : " << std::endl;
                 switch (fitType) {
                     case ASO:
-                        std::cout << "[Ponca] ASO : ";
                         estimateCurvature<FitASODiff, true, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case APSS:
-                        std::cout << "[Ponca] APSS : ";
                         estimateCurvature<FitAPSSDiff, true, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case PSS:
-                        std::cout << "[Ponca] PSS : ";
                         estimateCurvature<FitPlaneDiff, true, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case UnorientedSphere:
-                        std::cout << "[Ponca] UnorientedSphere : ";
                         estimateCurvature<FitUnorientedSphereDiff, true, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
-                    case PlaneCovMongePatch:
-                        std::cout << "[Ponca] PlaneCovMongePatch : "; // TODO : fix this fit
+                    case PlaneCovMongePatch: // TODO : fix this fit
                         estimateCurvature<FitPlaneCovMongePatch, false, true>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case PlaneMean:
-                        std::cout << "[Ponca] PlaneMean : ";
                         estimateCurvature<FitPlaneMean, false, false>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     case Sphere:
-                        std::cout << "[Ponca] Sphere : ";
                         estimateCurvature<FitSphere, false, false>(displayedScalar, showMinCurvatureDir, showMaxCurvatureDir, showFitGradientDir);
                         break;
                     default:
