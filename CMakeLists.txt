@@ -18,16 +18,6 @@ set(LIBIGL_GLFW ON CACHE BOOL "" FORCE)
 set(LIBIGL_IMGUI ON CACHE BOOL "" FORCE)
 set(LIBIGL_VIEWER ON CACHE BOOL "" FORCE)
 
-include(FetchContent)
-
-FetchContent_Declare(
-        glad
-        GIT_REPOSITORY https://github.com/Dav1dde/glad.git
-        GIT_TAG        v0.1.36
-)
-
-FetchContent_MakeAvailable(glad)
-
 # Add libigl
 add_subdirectory(external/libigl)
 
@@ -44,7 +34,6 @@ target_include_directories(${PROJECT_NAME}
 
 
 target_link_libraries(${PROJECT_NAME}
-        PRIVATE glad
         PRIVATE igl::core
         PRIVATE igl::glfw
         PRIVATE igl::opengl

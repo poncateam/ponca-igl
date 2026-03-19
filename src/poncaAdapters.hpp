@@ -39,17 +39,16 @@ template<typename KdTreeType>
 void buildKdTree(const Eigen::MatrixXd& cloudV, const Eigen::MatrixXd& cloudN, KdTreeType& tree){
     std::vector<int> ids(cloudV.rows());
     std::iota(ids.begin(), ids.end(), 0);
-
-    using VN = std::pair<const Eigen::MatrixXd&, const Eigen::MatrixXd&>;
-
+    
     // Build KdTree: do not copy coordinate but rather store Eigen::Block
-    tree.buildWithSampling(VN(cloudV, cloudN),
+    using Point = typename KdTreeType::DataPoint;
+    tree.buildWithSampling(cloudV, 
                            ids,
-                           [](VN bufs, typename KdTreeType::PointContainer &out) {
-                               int s = bufs.first.rows();
-                               out.reserve(s);
-                               for (int i = 0; i != s; ++i)
-                                   out.push_back(typename KdTreeType::DataPoint(bufs.first.row(i).transpose(),
-                                                                                bufs.second.row(i).transpose()));
+                           [&](const Eigen::MatrixXd& mat, auto &out) {
+                               out.reserve(mat.rows());
+                               for (int i = 0; i != mat.rows(); ++i)
+                               {
+                                   out.push_back(Point(cloudV.row(i).transpose(), cloudN.row(i).transpose()));
+                                }
                            });
 }
